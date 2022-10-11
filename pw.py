@@ -60,21 +60,20 @@ def read_game():
     html = element.get_attribute('outerHTML')
 
     soup = BeautifulSoup(html, "html.parser")
-    patches_html = soup.select(".patch.flipper")
 
     patches = dict()
     token = soup.find("div", class_="token_neutral")
 
-    for elem in patches_html:
-        if elem['id'].startswith("patch_"):
-            title_: [str] = elem['title'].split()
-
-            patches[elem['id']] = {
-                'data-order': elem['data-order'],
-                'button-cost': title_[2],
-                'time-cost': title_[5],
-                'income': title_[-1]
-            }
+    patches_html = soup.find('div', id='market')
+    for elem in patches_html.findChildren("div", class_="patch"):
+        assert elem['id'].startswith("patch_")
+        title_: [str] = elem['title'].split()
+        patches[elem['id']] = {
+            'data-order': elem['data-order'],
+            'button-cost': title_[2],
+            'time-cost': title_[5],
+            'income': title_[-1]
+        }
 
     player_html = soup.find('div', id="player_boards")
     player = {}
@@ -117,8 +116,9 @@ def go_play():
     patches, token_position, players = read_game()
     pieces, p1, p2 = init_game(patches, int(token_position), players)
     active_player: Player = p1 if p1.player_turn else p2
-    print(f"{active_player.player_name}'s turn ({active_player.status})")
-    active_player.calculate_turn(pieces)
+    print(f"{active_player.player_name}'s turn ({active_player.status()})")
+    best_piece, index = active_player.calculate_turn(pieces)
+    print(f"Choose patch {index}: {best_piece}")
 
 
 if __name__ == "__main__":

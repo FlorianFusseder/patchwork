@@ -1,4 +1,4 @@
-from typing import Type, Optional, Dict
+from typing import Type, Optional, Dict, List
 
 import numpy as np
 
@@ -19,11 +19,11 @@ class Location:
 class Piece:
     def __init__(self, id_, button_cost, time_cost, button_income, shape=None) -> None:
         self.id_ = id_
-        self.button_cost = button_cost
-        self.time_cost = time_cost
-        self.button_income = button_income
+        self.button_cost = int(button_cost)
+        self.time_cost = int(time_cost)
+        self.button_income = int(button_income)
         self.shape = np.array(shape)
-        self.size = np.count_nonzero(self.shape)
+        self.size = p_arrays[self.id_]['size']
 
     def __str__(self) -> str:
         return f"Id: {self.id_}, ButtonCost: {self.button_cost}, TimeCost: {self.time_cost}, " \
@@ -50,6 +50,9 @@ class Patches:
 
         for id_, patch in patches.items():
             self.collection.append(Piece(id_, patch['button-cost'], patch['time-cost'], patch['income']))
+
+    def get_next_three(self) -> List[Piece]:
+        return self.collection[self.token_position:self.token_position + 3]
 
     def __len__(self):
         return len(self.collection)
@@ -78,8 +81,8 @@ class TimeTrack:
         for i in range(53, -1, -1):
             self.track.append(TimeTrack.TimeTrackField(i))
 
-    def get_remaining_income_phases(self, player) -> int:
-        return player.time_count
+    def get_remaining_income_phases(self, player) -> float:
+        return sum(location > (TimeTrack._goal_id - player.time_count) for location in TimeTrack._income_locations)
 
 
 class Player:
@@ -94,9 +97,9 @@ class Player:
     def __init__(self, player_number: int, player_data: Dict):
         self.player_number = player_number
         self.player_name = player_data["name"]
-        self.time_count = player_data["time_counter"]
-        self.button_production = player_data["income_counter"]
-        self.button_count = player_data["button_counter"]
+        self.time_count = int(player_data["time_counter"])
+        self.button_production = int(player_data["income_counter"])
+        self.button_count = int(player_data["button_counter"])
         self.color_code = player_data["color_code"]
         self.player_turn = player_data["current_player"]
         self.player_track = TimeTrack()
@@ -109,6 +112,15 @@ class Player:
         return f"Player {self.player_number} {self.player_name}: Buttons: {self.button_count}, " \
                f"ButtonProduction: {self.button_production}, Time: {self.time_count}"
 
-    def calculate_turn(self, patches: Patches) -> (Piece, Location):
+    def calculate_turn(self, patches: Patches) -> (Piece, int):
         remaining_income_phases = self.player_track.get_remaining_income_phases(self)
-        return patches[0], Location(0, 0)
+        winner_rate = None
+        winner_index = None
+        three = patches.get_next_three()
+        for i, patch in enumerate(three):
+            rate = patch.get_button_rate(remaining_income_phases)
+            print(f"Rate of {i + 1} => {rate}\t ({patch})")
+            if not winner_rate or rate > winner_rate:
+                winner_rate = rate
+                winner_index = i
+        return three[winner_index], winner_index + 1
