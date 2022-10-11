@@ -119,7 +119,7 @@ class Player:
         three = patches.get_next_three()
         for i, patch in enumerate(three):
             rate = patch.get_button_rate(remaining_income_phases)
-            print(f"Rate of {i + 1} => {rate}\t ({patch})")
+            print(f"Rate of {i + 1} => {rate:.3f}\t ({patch})")
             if not winner_rate or rate > winner_rate:
                 winner_rate = rate
                 winner_index = i

@@ -1,22 +1,19 @@
 from typing import Dict
 
+from bs4 import BeautifulSoup
+from selenium.webdriver import Firefox
+from selenium.webdriver.common.by import By
+from selenium.webdriver.firefox.options import Options
+from selenium.webdriver.support import expected_conditions
+from selenium.webdriver.support.wait import WebDriverWait
+
 from components import Patches, Player, TimeTrack
 
+import click
 
-def read_game():
+
+def read_game(driver):
     print("Read data...")
-    from selenium.webdriver import Firefox
-    from selenium.webdriver.common.by import By
-    from selenium.webdriver.firefox.options import Options
-    from selenium.webdriver.support import expected_conditions
-    from selenium.webdriver.support.wait import WebDriverWait
-    from bs4 import BeautifulSoup
-
-    options = Options()
-    options.add_argument('--headless')
-    driver = Firefox(options=options)
-    driver.get('https://boardgamearena.com/6/patchwork?table=307392525')
-
     ids = [
         "patch_1",
         "patch_2",
@@ -53,8 +50,9 @@ def read_game():
         "patch_33"
     ]
 
-    for id_ in ids:
-        WebDriverWait(driver, 30).until(expected_conditions.presence_of_all_elements_located((By.ID, id_)))
+    with click.progressbar(ids) as indices:
+        for id_ in indices:
+            WebDriverWait(driver, 30).until(expected_conditions.presence_of_all_elements_located((By.ID, id_)))
 
     element = driver.find_element(By.ID, "overall-content")
     html = element.get_attribute('outerHTML')
@@ -97,8 +95,6 @@ def read_game():
             "income_counter": income_counter,
             "color_code": player_color_code,
         }
-
-    driver.quit()
     return patches, token['data-order'], player
 
 
@@ -112,13 +108,25 @@ def init_game(patches: Dict, token_position: int, players: Dict) -> (TimeTrack, 
     return pieces, p1, p2
 
 
-def go_play():
-    patches, token_position, players = read_game()
-    pieces, p1, p2 = init_game(patches, int(token_position), players)
-    active_player: Player = p1 if p1.player_turn else p2
-    print(f"{active_player.player_name}'s turn ({active_player.status()})")
-    best_piece, index = active_player.calculate_turn(pieces)
-    print(f"Choose patch {index}: {best_piece}")
+@click.command()
+@click.argument("uri")
+def go_play(uri):
+    options = Options()
+    options.add_argument('--headless')
+
+    with Firefox(options=options) as driver:
+        print(f"Trying to connect to {uri}... (this takes a while)")
+        driver.get(uri)
+        while True:
+            patches, token_position, players = read_game(driver)
+            pieces, p1, p2 = init_game(patches, int(token_position), players)
+            active_player: Player = p1 if p1.player_turn else p2
+            print(f"{active_player.player_name}'s turn ({active_player.status()})")
+            best_piece, index = active_player.calculate_turn(pieces)
+            print("\n")
+            print(f"Choose patch {index}: {best_piece}")
+            input("Press any key to continue...")
+            click.clear()
 
 
 if __name__ == "__main__":
