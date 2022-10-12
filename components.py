@@ -1,4 +1,4 @@
-from typing import Type, Optional, Dict, List
+from typing import Dict, List
 
 import numpy as np
 
@@ -101,31 +101,38 @@ class Player:
         self.button_production = int(player_data["income_counter"])
         self.button_count = int(player_data["button_counter"])
         self.color_code = player_data["color_code"]
-        self.player_turn = player_data["current_player"]
-        self.player_track = TimeTrack()
+        self.my_turn = player_data["current_player"]
+        self.empty_spaces = int(player_data["empty_spaces"])
+
+        self.owned_patches = player_data["owned_pieces"]
+        self.track = TimeTrack()
         self.board = Player.Board()
 
-        self.score = self.calculate_score()
+        self.score = self.calculate_current_score()
 
     def __str__(self) -> str:
         return f"{self.player_name}"
 
     def status(self) -> str:
         return f"Player {self.player_number} {self.player_name}: Buttons: {self.button_count}, " \
-               f"ButtonProduction: {self.button_production}, Time: {self.time_count}"
+               f"ButtonProduction: {self.button_production}, Time: {self.time_count}, EmptySpaces: {self.empty_spaces}"
 
     def calculate_turn(self, patches: Patches) -> (Piece, int):
-        remaining_income_phases = self.player_track.get_remaining_income_phases(self)
+        remaining_income_phases = self.track.get_remaining_income_phases(self)
         winner_rate = None
         winner_index = None
-        three = patches.get_next_three()
-        for i, patch in enumerate(three):
+        three_patches = patches.get_next_three()
+        three_rates = [0, 0, 0]
+        for i, patch in enumerate(three_patches):
             rate = patch.get_button_rate(remaining_income_phases)
+            three_rates[i] = rate
             print(f"Rate of {i + 1} => {rate:.3f}\t ({patch})")
             if not winner_rate or rate > winner_rate:
                 winner_rate = rate
                 winner_index = i
-        return three[winner_index], winner_index + 1
+        return three_patches, winner_index, three_rates
 
-    def calculate_score(self):
-        return
+    def calculate_current_score(self):
+        return -(self.empty_spaces * 2) \
+               + self.button_count \
+               + self.button_production * self.track.get_remaining_income_phases(self)

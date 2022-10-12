@@ -1,6 +1,6 @@
-from time import sleep
-from typing import Dict
+from typing import Dict, List
 
+import click
 from bs4 import BeautifulSoup
 from selenium.webdriver import Firefox
 from selenium.webdriver.common.by import By
@@ -9,56 +9,29 @@ from selenium.webdriver.support import expected_conditions
 from selenium.webdriver.support.wait import WebDriverWait
 
 from components import Patches, Player, TimeTrack
+from pieces import p_arrays
 
-import click
+
+def get_owned_patches(soup: BeautifulSoup, color_code: str) -> List:
+    pieces = soup.find("div", id=f"pieces_{color_code}").findChildren("div", class_="patch")
+    return [p['id'] for p in pieces]
+
+
+def get_soup(driver):
+    element = driver.find_element(By.ID, "overall-content")
+    html = element.get_attribute('outerHTML')
+    soup = BeautifulSoup(html, "html.parser")
+    return soup
 
 
 def read_game(driver):
     print("Read data...")
-    ids = [
-        "patch_1",
-        "patch_2",
-        "patch_3",
-        "patch_4",
-        "patch_5",
-        "patch_6",
-        "patch_7",
-        "patch_8",
-        "patch_9",
-        "patch_10",
-        "patch_11",
-        "patch_12",
-        "patch_13",
-        "patch_14",
-        "patch_15",
-        "patch_16",
-        "patch_17",
-        "patch_18",
-        "patch_19",
-        "patch_20",
-        "patch_21",
-        "patch_22",
-        "patch_23",
-        "patch_24",
-        "patch_25",
-        "patch_26",
-        "patch_27",
-        "patch_28",
-        "patch_29",
-        "patch_30",
-        "patch_31",
-        "patch_32",
-        "patch_33"
-    ]
 
-    with click.progressbar(ids) as indices:
+    with click.progressbar(p_arrays.keys()) as indices:
         for id_ in indices:
             WebDriverWait(driver, 30).until(expected_conditions.presence_of_all_elements_located((By.ID, id_)))
 
-    element = driver.find_element(By.ID, "overall-content")
-    html = element.get_attribute('outerHTML')
-
-    soup = BeautifulSoup(html, "html.parser")
+    soup: BeautifulSoup = get_soup(driver)
 
     patches = dict()
     token = soup.find("div", id="token_neutral")
@@ -87,6 +60,9 @@ def read_game(driver):
         time_counter = player_board.findChild("div", class_="time_counter mini_counter").text
         button_counter = player_board.findChild("div", class_="buttons_counter mini_counter").text
         income_counter = player_board.findChild("div", class_="income_counter subtext mini_counter").text
+        empty_spaces_counter = player_board.findChild("div", class_="empties_counter mini_counter").text
+
+        owned_patches = get_owned_patches(soup, player_color_code)
 
         player[player_id] = {
             "current_player": current_player == 'display: block;',
@@ -95,7 +71,10 @@ def read_game(driver):
             "button_counter": button_counter,
             "income_counter": income_counter,
             "color_code": player_color_code,
+            "empty_spaces": empty_spaces_counter,
+            "owned_pieces": owned_patches
         }
+
     return patches, token['data-order'], player
 
 
@@ -129,12 +108,19 @@ def init_game(patches: Dict, token_position: int, players: Dict) -> (TimeTrack, 
     return pieces, p1, p2
 
 
+def print_statistics(player, statistics):
+    if player.player_name in statistics and 'chart' in statistics[player.player_name]:
+        average_button_rates = [bought_piece[1] for bought_piece in statistics[player.player_name]['chart']]
+        print(f"{player.player_name}'s Ø button-rate: {(sum(average_button_rates) / len(average_button_rates))}"
+              f" ({average_button_rates})")
+
+
 @click.command()
 @click.option("--url", prompt='Table URL')
 def go_play(url):
     options = Options()
     options.add_argument('--headless')
-
+    statistics = {}
     with Firefox(options=options) as driver:
         print(f"Starting Browser...")
         driver.start_client()
@@ -144,15 +130,36 @@ def go_play(url):
             patches, token_position, players = read_game(driver)
             token_position = int(token_position)
             pieces, p1, p2 = init_game(patches, token_position, players)
-            active_player: Player = p1 if p1.player_turn else p2
+            print(f"{p1.player_name}'s score: {p1.score}")
+            print(f"{p2.player_name}'s score: {p2.score}")
+            active_player: Player = p1 if p1.my_turn else p2
             print(f"{active_player.player_name}'s turn ({active_player.status()})")
-            best_piece, index = active_player.calculate_turn(pieces)
+            patches_to_choose, index, rates = active_player.calculate_turn(pieces)
             print("\n")
-            print(f"Choose patch {index}: {best_piece}")
+            print(f"Suggestion patch {index + 1}: {patches_to_choose[index]}")
+            before_owned_patches = active_player.owned_patches
             driver_wait = WebDriverWait(driver, 180)
             driver_wait.until(turn_ended((By.ID, 'pagemaintitletext')))
             driver_wait.until(turn_starts((By.ID, 'pagemaintitletext')))
+            soup = get_soup(driver)
+            current_owned_patches = get_owned_patches(soup, active_player.color_code)
+            bought = (set(current_owned_patches) - set(before_owned_patches))
             click.clear()
+            if bought:
+                bought_patch_id = bought.pop()
+                for index, patch in enumerate(patches_to_choose):
+                    if patch.id_ == bought_patch_id:
+                        statistics \
+                            .setdefault(active_player.player_name, {}) \
+                            .setdefault("chart", []) \
+                            .append((patch, rates[index]))
+                        print(f"{active_player.player_name} bought {index + 1} with button_rate: {rates[index]} ({patch})")
+                        break
+            else:
+                print(f"{active_player.player_name} traded buttons for time!")
+            print_statistics(p1, statistics)
+            print_statistics(p2, statistics)
+            print("-" * 50)
 
 
 if __name__ == "__main__":
