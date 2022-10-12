@@ -105,6 +105,8 @@ class Player:
         self.player_track = TimeTrack()
         self.board = Player.Board()
 
+        self.score = self.calculate_score()
+
     def __str__(self) -> str:
         return f"{self.player_name}"
 
@@ -124,3 +126,6 @@ class Player:
                 winner_rate = rate
                 winner_index = i
         return three[winner_index], winner_index + 1
+
+    def calculate_score(self):
+        return

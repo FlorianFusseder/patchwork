@@ -1,3 +1,4 @@
+from time import sleep
 from typing import Dict
 
 from bs4 import BeautifulSoup
@@ -60,7 +61,7 @@ def read_game(driver):
     soup = BeautifulSoup(html, "html.parser")
 
     patches = dict()
-    token = soup.find("div", class_="token_neutral")
+    token = soup.find("div", id="token_neutral")
 
     patches_html = soup.find('div', id='market')
     for elem in patches_html.findChildren("div", class_="patch"):
@@ -98,6 +99,19 @@ def read_game(driver):
     return patches, token['data-order'], player
 
 
+class data_order_changes(object):
+
+    def __init__(self, locator, current_data_order):
+        self.locator = locator
+        self.data_order = current_data_order
+
+    def __call__(self, driver):
+        element = driver.find_element(*self.locator)
+        attribute = element.get_attribute("data-order")
+        print(attribute)
+        return self.data_order != int(attribute)
+
+
 def init_game(patches: Dict, token_position: int, players: Dict) -> (TimeTrack, Patches, Player, Player):
     print("Init data structure...")
     pieces = Patches(patches, token_position)
@@ -109,24 +123,28 @@ def init_game(patches: Dict, token_position: int, players: Dict) -> (TimeTrack, 
 
 
 @click.command()
-@click.argument("uri")
-def go_play(uri):
+@click.option("--url", prompt='Table URL')
+def go_play(url):
     options = Options()
     options.add_argument('--headless')
 
     with Firefox(options=options) as driver:
-        print(f"Trying to connect to {uri}... (this takes a while)")
-        driver.get(uri)
+        print(f"Starting Browser...")
+        driver.start_client()
+        print(f"Trying to connect to {url}... (this takes a while)")
+        driver.get(url)
         while True:
             patches, token_position, players = read_game(driver)
-            pieces, p1, p2 = init_game(patches, int(token_position), players)
+            token_position = int(token_position)
+            pieces, p1, p2 = init_game(patches, token_position, players)
             active_player: Player = p1 if p1.player_turn else p2
             print(f"{active_player.player_name}'s turn ({active_player.status()})")
             best_piece, index = active_player.calculate_turn(pieces)
             print("\n")
             print(f"Choose patch {index}: {best_piece}")
-            input("Press any key to continue...")
-            click.clear()
+            driver_wait = WebDriverWait(driver, 180)
+            driver_wait.until(data_order_changes((By.ID, 'token_neutral'), token_position))
+            # click.clear()
 
 
 if __name__ == "__main__":
