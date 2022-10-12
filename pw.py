@@ -99,17 +99,24 @@ def read_game(driver):
     return patches, token['data-order'], player
 
 
-class data_order_changes(object):
+class turn_ended(object):
 
-    def __init__(self, locator, current_data_order):
+    def __init__(self, locator):
         self.locator = locator
-        self.data_order = current_data_order
 
     def __call__(self, driver):
-        element = driver.find_element(*self.locator)
-        attribute = element.get_attribute("data-order")
-        print(attribute)
-        return self.data_order != int(attribute)
+        state_text: str = driver.find_element(*self.locator).text
+        return not state_text.endswith("must take an action")
+
+
+class turn_starts(object):
+
+    def __init__(self, locator):
+        self.locator = locator
+
+    def __call__(self, driver):
+        state_text: str = driver.find_element(*self.locator).text
+        return state_text.endswith("must take an action")
 
 
 def init_game(patches: Dict, token_position: int, players: Dict) -> (TimeTrack, Patches, Player, Player):
@@ -143,8 +150,9 @@ def go_play(url):
             print("\n")
             print(f"Choose patch {index}: {best_piece}")
             driver_wait = WebDriverWait(driver, 180)
-            driver_wait.until(data_order_changes((By.ID, 'token_neutral'), token_position))
-            # click.clear()
+            driver_wait.until(turn_ended((By.ID, 'pagemaintitletext')))
+            driver_wait.until(turn_starts((By.ID, 'pagemaintitletext')))
+            click.clear()
 
 
 if __name__ == "__main__":
