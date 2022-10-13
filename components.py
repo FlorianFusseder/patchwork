@@ -30,9 +30,10 @@ class Piece:
         return f"Id: {self.id_}, ButtonCost: {self.button_cost}, TimeCost: {self.time_cost}, " \
                f"Production: {self.button_income}, Size: {self.size}"
 
-    def get_button_rate(self, remaining_income_phases) -> float:
+    def get_button_rate(self, remaining_income_phases, remaining_time) -> float:
         # Button-rate = [(size x 2) + (buttons x remaining income phases) - button cost] / time cost
-        return ((self.size * 2) + (self.button_income * remaining_income_phases) - self.button_cost) / self.time_cost
+        time_cost = remaining_time if self.time_cost > remaining_time else self.time_cost
+        return ((self.size * 2) + (self.button_income * remaining_income_phases) - self.button_cost) / time_cost
 
     def show(self):
         copy = np.copy(self.shape)
@@ -130,12 +131,12 @@ class Player:
         winner_rate = None
 
         for i, patch in enumerate(three_patches):
-            rate = patch.get_button_rate(remaining_income_phases)
+            rate = patch.get_button_rate(remaining_income_phases, self.time_count)
             affordable = patch.button_cost <= self.button_count
             results[i]['button-rate'] = rate
             results[i]['affordable'] = affordable
             results[i]['patch'] = patch
-            if affordable and (not winner_rate or rate > winner_rate):
+            if affordable and (not winner_rate or rate > winner_rate) and rate > 1:
                 winner_rate = rate
                 results['winner-index'] = i
         return results

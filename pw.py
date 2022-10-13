@@ -203,29 +203,48 @@ def process_player_choice(active_player, driver, results, statistics):
 
 def print_suggestion(results):
     winner_index = results['winner-index']
+    candidates = []
+    non_affordable = []
+    low_button_rate = []
+
+    def print_(lst):
+        [click.echo(f"\tRate of {elem[0] + 1} => {elem[1]['button-rate']:.3f}\t({elem[1]['patch']})") for elem in
+         lst]
+
+    for i in range(3):
+        patch = results[i]
+        _list = None
+        if patch['affordable'] and patch['button-rate'] > 1:
+            _list = candidates
+        elif patch['affordable'] and patch['button-rate'] <= 1:
+            _list = low_button_rate
+        elif not patch['affordable']:
+            _list = non_affordable
+        else:
+            Exception(f"Patch not categorizable: {patch}")
+
+        _list.append((i, patch))
+
+    if candidates:
+        candidates.sort(key=lambda x: x[1]['button-rate'], reverse=True)
+        click.echo("Affordable:")
+        print_(candidates)
+    if non_affordable:
+        click.echo("Omitted due to cost:")
+        print_(non_affordable)
+    if low_button_rate:
+        click.echo("Omitted due to button-rate:")
+        print_(low_button_rate)
+
+    click.echo()
+
     if winner_index is not None:
-        affordables = []
-        non_affordables = []
-        for i in range(3):
-            (affordables if results[i]['affordable'] else non_affordables).append((i, results[i]))
-
-        if affordables:
-            affordables.sort(key=lambda x: x[1]['button-rate'], reverse=True)
-            click.echo("Affordable:")
-            [click.echo(f"\tRate of {data[0] + 1}  => {data[1]['button-rate']:.3f}\t({data[1]['patch']})") for data in
-             affordables]
-        if non_affordables:
-            click.echo("Omitted due to cost:")
-            [click.echo(f"\tRate of {data[0] + 1}  => {data[1]['button-rate']:.3f}\t({data[1]['patch']})") for data in
-             non_affordables]
-
-        click.echo()
         click.secho(f"Suggested patch: ", nl=False, fg='green')
         click.secho(f"{winner_index + 1} => rate: {results[winner_index]['button-rate']}",
                     nl=False, fg='green', bold=True, underline=True)
         click.secho(f" ({results[winner_index]['patch']})")
     else:
-        click.secho(f"Cannot afford any patches => advance", fg='red')
+        click.secho("No valid canidate => advance", fg='red')
 
 
 def print_delimiter(nl=False):
