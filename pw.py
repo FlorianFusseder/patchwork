@@ -61,6 +61,7 @@ def read_game_state(driver):
         button_counter = player_board.findChild("div", class_="buttons_counter mini_counter").text
         income_counter = player_board.findChild("div", class_="income_counter subtext mini_counter").text
         empty_spaces_counter = player_board.findChild("div", class_="empties_counter mini_counter").text
+        special7x7 = player_board.findChild("div", id="tile_special7x7")
 
         owned_patches = get_owned_patches(soup, player_color_code)
 
@@ -72,7 +73,8 @@ def read_game_state(driver):
             "income_counter": income_counter,
             "color_code": player_color_code,
             "empty_spaces": empty_spaces_counter,
-            "owned_pieces": owned_patches
+            "owned_pieces": owned_patches,
+            "special7x7": (special7x7 is not None),
         }
 
     return patches, int(token['data-order']), player

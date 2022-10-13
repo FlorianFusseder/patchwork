@@ -115,6 +115,7 @@ class Player:
         self.color_code = player_data["color_code"]
         self.my_turn = player_data["current_player"]
         self.empty_spaces = int(player_data["empty_spaces"])
+        self.owns_special7x7 = player_data["special7x7"]
 
         self.owned_patches = player_data["owned_pieces"]
         self.track = TimeTrack()
@@ -154,4 +155,5 @@ class Player:
     def calculate_current_score(self):
         return -(self.empty_spaces * 2) \
                + self.button_count \
-               + self.button_production * self.track.get_remaining_income_phases(self)
+               + self.button_production * self.track.get_remaining_income_phases(self) \
+               + 0 if not self.owns_special7x7 else 7
