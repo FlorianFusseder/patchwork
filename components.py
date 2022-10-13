@@ -30,10 +30,12 @@ class Piece:
         return f"Id: {self.id_}, ButtonCost: {self.button_cost}, TimeCost: {self.time_cost}, " \
                f"Production: {self.button_income}, Size: {self.size}"
 
-    def get_button_rate(self, remaining_income_phases, remaining_time) -> float:
+    def get_button_rate(self, remaining_income_phases, remaining_time, track) -> float:
         # Button-rate = [(size x 2) + (buttons x remaining income phases) - button cost] / time cost
+        special_patch_factor = track.triggers_special_patch(remaining_time, self.time_cost)
         time_cost = remaining_time if self.time_cost > remaining_time else self.time_cost
-        return ((self.size * 2) + (self.button_income * remaining_income_phases) - self.button_cost) / time_cost
+        return (self.size * 2 + (
+                self.button_income * remaining_income_phases) - self.button_cost + special_patch_factor) / time_cost
 
     def show(self):
         copy = np.copy(self.shape)
@@ -86,6 +88,14 @@ class TimeTrack:
     def get_remaining_income_phases(self, player) -> float:
         return sum(location > (TimeTrack._goal_id - player.time_count) for location in self._income_locations)
 
+    def triggers_special_patch(self, remaining_time, time_cost):
+        start_time = self._goal_id - remaining_time
+        next_time = start_time + time_cost
+        for _special_spot_location in self._special_spot_locations:
+            if start_time < _special_spot_location < next_time:
+                return 2
+        return 0
+
 
 class Player:
     class Board:
@@ -131,7 +141,7 @@ class Player:
         winner_rate = None
 
         for i, patch in enumerate(three_patches):
-            rate = patch.get_button_rate(remaining_income_phases, self.time_count)
+            rate = patch.get_button_rate(remaining_income_phases, self.time_count, self.track)
             affordable = patch.button_cost <= self.button_count
             results[i]['button-rate'] = rate
             results[i]['affordable'] = affordable
