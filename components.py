@@ -1,5 +1,6 @@
-from typing import Dict, List
+from typing import Dict, List, Optional
 
+import click
 import numpy as np
 
 from pieces import p_arrays, b_array
@@ -117,19 +118,28 @@ class Player:
         return f"Player {self.player_number} {self.player_name}: Buttons: {self.button_count}, " \
                f"ButtonProduction: {self.button_production}, Time: {self.time_count}, EmptySpaces: {self.empty_spaces}"
 
-    def calculate_turn(self, patches: Patches) -> (Piece, int):
+    def calculate_turn(self, patches: Patches) -> (Piece, Optional[int], List[Piece]):
         remaining_income_phases = self.track.get_remaining_income_phases(self)
         winner_rate = None
         winner_index = None
         three_patches = patches.get_next_three()
         three_rates = [0, 0, 0]
+        msgs = {
+            True: [],
+            False: []
+        }
         for i, patch in enumerate(three_patches):
             rate = patch.get_button_rate(remaining_income_phases)
             three_rates[i] = rate
-            print(f"Rate of {i + 1} => {rate:.3f}\t ({patch})")
-            if not winner_rate or rate > winner_rate:
+            affordable = patch.button_cost <= self.button_count
+            msgs[affordable].append(f"Rate of {i + 1} => {rate:.3f}\t ({patch})")
+            if affordable and (not winner_rate or rate > winner_rate):
                 winner_rate = rate
                 winner_index = i
+        click.echo("\nAffordable:")
+        [print("\t", msg) for msg in msgs[True]]
+        click.echo("Omitted due to cost:")
+        [print("\t", msg) for msg in msgs[False]]
         return three_patches, winner_index, three_rates
 
     def calculate_current_score(self):
