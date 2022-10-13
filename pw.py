@@ -14,7 +14,7 @@ from pieces import p_arrays
 
 
 def get_owned_patches(soup: BeautifulSoup, color_code: str) -> List:
-    pieces = soup.find("div", id=f"pieces_{color_code}").findChildren("div", class_="patch")
+    pieces = soup.find("div", id=f"pieces_{color_code}").select("div.patch.flipper")
     return [p['id'] for p in pieces]
 
 
@@ -25,9 +25,8 @@ def get_soup(driver):
     return soup
 
 
-def read_game(driver):
-    print("Read data...")
-
+def read_game_state(driver):
+    click.echo("Read data...")
     with click.progressbar(p_arrays.keys()) as indices:
         for id_ in indices:
             WebDriverWait(driver, 30).until(expected_conditions.presence_of_all_elements_located((By.ID, id_)))
@@ -76,7 +75,7 @@ def read_game(driver):
             "owned_pieces": owned_patches
         }
 
-    return patches, token['data-order'], player
+    return patches, int(token['data-order']), player
 
 
 class turn_ended(object):
@@ -127,10 +126,9 @@ def print_statistics(player1, player2, statistics):
                         nl=False)
             click.echo(f"\t(history: {', '.join([str(round(r, 2)) for r in p1_button_rates])})")
 
-    click.echo()
     print_(player1, player2)
     print_(player2, player1)
-    click.echo("-" * 50)
+    click.echo()
 
 
 def get_player_color(player):
@@ -138,9 +136,6 @@ def get_player_color(player):
 
 
 def print_game_status(p1, p2):
-    click.echo("-" * 50)
-    click.echo()
-
     def get_color(p1_, p2_):
         if p1_.score > p2_.score:
             return 'green'
@@ -162,8 +157,81 @@ def print_game_status(p1, p2):
 def get_active_player(p1, p2):
     active_player: Player = p1 if p1.my_turn else p2
     click.secho(f"{active_player.player_name}'s turn", fg=get_player_color(active_player), nl=False)
-    click.echo(f" ({active_player.status()})")
+    click.echo(f" ({active_player.status()})\n")
     return active_player
+
+
+def process_player_choice(active_player, driver, results, statistics):
+    before_owned_patches = active_player.owned_patches
+    driver_wait = WebDriverWait(driver, 180)
+    driver_wait.until(turn_ended((By.ID, 'pagemaintitletext')))
+    driver_wait.until(turn_starts((By.ID, 'pagemaintitletext')))
+    soup = get_soup(driver)
+    current_owned_patches = get_owned_patches(soup, active_player.color_code)
+    bought = (set(current_owned_patches) - set(before_owned_patches))
+    click.clear()
+    if bought:
+        assert len(bought) == 1, bought
+        bought_patch_id = bought.pop()
+        for i in range(3):
+            result_dict = results[i]
+            if result_dict['patch'].id_ == bought_patch_id:
+                statistics \
+                    .setdefault(active_player.player_name, {}) \
+                    .setdefault("chart", []) \
+                    .append((result_dict['patch'], result_dict['button-rate']))
+
+                click.secho(f"{active_player.player_name} ", fg=get_player_color(active_player), nl=False)
+                bought_best = results['winner-index'] == i
+                click.secho(
+                    f"bought {'optimal' if bought_best else 'suboptimal'} patch {i + 1} with button-rate: ",
+                    fg=('green' if bought_best else 'yellow'), nl=False)
+                click.secho(f"{result_dict['button-rate']:.2f}", bg=('green' if bought_best else 'yellow'), fg='black',
+                            nl=False)
+                if bought_best:
+                    click.echo()
+                else:
+                    click.echo(" instead of ", nl=False)
+                    click.secho(f"Patch {results['winner-index'] + 1} with button-rate: ", fg='green', nl=False)
+                    click.secho(f"{results[results['winner-index']]['button-rate']:.2f}", bg='green', fg='black')
+                break
+    else:
+        click.secho(f"{active_player.player_name}", fg=get_player_color(active_player), nl=False)
+        click.echo(" traded buttons for time!")
+    click.echo()
+
+
+def print_suggestion(results):
+    winner_index = results['winner-index']
+    if winner_index is not None:
+        affordables = []
+        non_affordables = []
+        for i in range(3):
+            (affordables if results[i]['affordable'] else non_affordables).append((i, results[i]))
+
+        if affordables:
+            affordables.sort(key=lambda x: x[1]['button-rate'], reverse=True)
+            click.echo("Affordable:")
+            [click.echo(f"\tRate of {data[0] + 1}  => {data[1]['button-rate']:.3f}\t({data[1]['patch']})") for data in
+             affordables]
+        if non_affordables:
+            click.echo("Omitted due to cost:")
+            [click.echo(f"\tRate of {data[0] + 1}  => {data[1]['button-rate']:.3f}\t({data[1]['patch']})") for data in
+             non_affordables]
+
+        click.echo()
+        click.secho(f"Suggested patch: ", nl=False, fg='green')
+        click.secho(f"{winner_index + 1} => rate: {results[winner_index]['button-rate']}",
+                    nl=False, fg='green', bold=True, underline=True)
+        click.secho(f" ({results[winner_index]['patch']})")
+    else:
+        click.secho(f"Cannot afford any patches => advance", fg='red')
+
+
+def print_delimiter(nl=False):
+    click.echo("-" * 50)
+    if nl:
+        click.echo()
 
 
 @click.command()
@@ -174,60 +242,21 @@ def go_play(url):
     statistics = {}
     click.clear()
     with Firefox(options=options) as driver:
-        print(f"Starting Browser...")
+        click.echo(f"Starting Browser...")
         driver.start_client()
-        print(f"Trying to connect to {url}... (this takes a while)")
+        click.echo(f"Trying to connect to {url}... (this takes a while)")
         driver.get(url)
         click.clear()
         while True:
-            patches, token_position, players = read_game(driver)
-            token_position = int(token_position)
+            print_delimiter()
+            patches, token_position, players = read_game_state(driver)
             pieces, p1, p2 = init_game(patches, token_position, players)
-            print_game_status(p1, p2)
+            print_delimiter(True)
             active_player: Player = get_active_player(p1, p2)
-            patches_to_choose, winner_index, rates = active_player.calculate_turn(pieces)
-            print("\n")
-            if winner_index is not None:
-                click.secho(f"Suggested patch: ", nl=False, fg='green')
-                click.secho(f"{winner_index + 1} => rate: {rates[winner_index]}", nl=False, fg='green', bold=True,
-                            underline=True)
-                click.secho(f" ({patches_to_choose[winner_index]})")
-            else:
-                click.secho(f"Cannot afford any patches => advance", fg='red')
-            before_owned_patches = active_player.owned_patches
-            driver_wait = WebDriverWait(driver, 180)
-            driver_wait.until(turn_ended((By.ID, 'pagemaintitletext')))
-            driver_wait.until(turn_starts((By.ID, 'pagemaintitletext')))
-            soup = get_soup(driver)
-            current_owned_patches = get_owned_patches(soup, active_player.color_code)
-            bought = (set(current_owned_patches) - set(before_owned_patches))
-            click.clear()
-            if bought:
-                assert len(bought) == 1, print(bought)
-                bought_patch_id = bought.pop()
-                for i, patch in enumerate(patches_to_choose):
-                    if patch.id_ == bought_patch_id:
-                        statistics \
-                            .setdefault(active_player.player_name, {}) \
-                            .setdefault("chart", []) \
-                            .append((patch, rates[i]))
-
-                        click.secho(f"{active_player.player_name} ", fg=get_player_color(active_player), nl=False)
-                        bought_best = winner_index == i
-                        click.secho(
-                            f"bought {'optimal' if bought_best else 'suboptimal'} patch {i + 1} with button_rate: ",
-                            fg=('green' if bought_best else 'yellow'), nl=False)
-                        click.secho(f"{rates[i]:.2f}", bg=('green' if bought_best else 'yellow'), fg='black', nl=False)
-                        if bought_best:
-                            click.echo()
-                        else:
-                            click.echo(" instead of ", nl=False)
-                            click.secho(f"patch {winner_index + 1} with button_rate: ", fg='green', nl=False)
-                            click.secho(f"{rates[winner_index]:.2f}", bg='green', fg='black')
-                        break
-            else:
-                click.echo(f"{active_player.player_name} traded buttons for time!")
-
+            print_game_status(p1, p2)
+            results = active_player.calculate_turn(pieces)
+            print_suggestion(results)
+            process_player_choice(active_player, driver, results, statistics)
             print_statistics(p1, p2, statistics)
 
 

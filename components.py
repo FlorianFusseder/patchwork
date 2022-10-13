@@ -83,7 +83,7 @@ class TimeTrack:
             self.track.append(TimeTrack.TimeTrackField(i))
 
     def get_remaining_income_phases(self, player) -> float:
-        return sum(location > (TimeTrack._goal_id - player.time_count) for location in TimeTrack._income_locations)
+        return sum(location > (TimeTrack._goal_id - player.time_count) for location in self._income_locations)
 
 
 class Player:
@@ -118,29 +118,27 @@ class Player:
         return f"Player {self.player_number} {self.player_name}: Buttons: {self.button_count}, " \
                f"ButtonProduction: {self.button_production}, Time: {self.time_count}, EmptySpaces: {self.empty_spaces}"
 
-    def calculate_turn(self, patches: Patches) -> (Piece, Optional[int], List[Piece]):
-        remaining_income_phases = self.track.get_remaining_income_phases(self)
-        winner_rate = None
-        winner_index = None
-        three_patches = patches.get_next_three()
-        three_rates = [0, 0, 0]
-        msgs = {
-            True: [],
-            False: []
+    def calculate_turn(self, patches: Patches) -> Dict:
+        results = {
+            'winner-index': None,
+            0: {},
+            1: {},
+            2: {},
         }
+        remaining_income_phases = self.track.get_remaining_income_phases(self)
+        three_patches = patches.get_next_three()
+        winner_rate = None
+
         for i, patch in enumerate(three_patches):
             rate = patch.get_button_rate(remaining_income_phases)
-            three_rates[i] = rate
             affordable = patch.button_cost <= self.button_count
-            msgs[affordable].append(f"Rate of {i + 1} => {rate:.3f}\t ({patch})")
+            results[i]['button-rate'] = rate
+            results[i]['affordable'] = affordable
+            results[i]['patch'] = patch
             if affordable and (not winner_rate or rate > winner_rate):
                 winner_rate = rate
-                winner_index = i
-        click.echo("\nAffordable:")
-        [print("\t", msg) for msg in msgs[True]]
-        click.echo("Omitted due to cost:")
-        [print("\t", msg) for msg in msgs[False]]
-        return three_patches, winner_index, three_rates
+                results['winner-index'] = i
+        return results
 
     def calculate_current_score(self):
         return -(self.empty_spaces * 2) \
