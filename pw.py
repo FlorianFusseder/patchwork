@@ -1,4 +1,5 @@
-from typing import Dict, List
+import time
+from typing import Dict, Set
 
 import click
 from PIL import ImageColor
@@ -6,16 +7,9 @@ from bs4 import BeautifulSoup
 from selenium.webdriver import Firefox
 from selenium.webdriver.common.by import By
 from selenium.webdriver.firefox.options import Options
-from selenium.webdriver.support import expected_conditions
 from selenium.webdriver.support.wait import WebDriverWait
 
-from components import Patches, Player, TimeTrack
-from pieces import p_arrays
-
-
-def get_owned_patches(soup: BeautifulSoup, color_code: str) -> List:
-    pieces = soup.find("div", id=f"pieces_{color_code}").select("div.patch.flipper")
-    return [p['id'] for p in pieces]
+from components import Market, Player, TimeTrack
 
 
 def get_soup(driver):
@@ -27,86 +21,50 @@ def get_soup(driver):
 
 def read_game_state(driver):
     click.echo("Read data...")
-    with click.progressbar(p_arrays.keys()) as indices:
-        for id_ in indices:
-            WebDriverWait(driver, 30).until(expected_conditions.presence_of_all_elements_located((By.ID, id_)))
 
-    soup: BeautifulSoup = get_soup(driver)
+    def wait_for_turn():
+        def _predicate(driver):
+            data = driver.execute_script("return window.gameui.gamedatas;")
+            return data if int(data['gamestate']['id']) == 2 else False
 
-    patches = dict()
-    token = soup.find("div", id="token_neutral")
+        return _predicate
 
-    patches_html = soup.find('div', id='market')
-    for elem in patches_html.findChildren("div", class_="patch"):
-        assert elem['id'].startswith("patch_")
-        title_: [str] = elem['title'].split()
-        patches[elem['id']] = {
-            'data-order': elem['data-order'],
-            'button-cost': title_[2],
-            'time-cost': title_[5],
-            'income': title_[-1]
+    game_data = WebDriverWait(driver, 30).until(wait_for_turn())
+
+    players = game_data['players']
+    for key, player in players.items():
+        player['income'] = game_data['counters'][f"income_{player['color']}_counter"]['counter_value']
+        player['empty_spaces'] = game_data['counters'][f"empties_{player['color']}_counter"]['counter_value']
+        player['players_turn'] = (game_data['gamestate']['active_player'] == player['id'])
+        player['buttons'] = sum(
+            [1 for token in game_data['tokens'].values() if token['location'] == f"buttons_{player['color']}"])
+        player['time_marker'] = {
+            'location': int(game_data['tokens'][f'timemarker_{player["color"]}']['location'].split('_')[1]),
+            'top': game_data['tokens'][f'timemarker_{player["color"]}']['state']
         }
+        player['tile_special7x7'] = game_data['tokens']['tile_special7x7']['location'] == f"tableau_{player['color']}"
+        player['owned_patches'] = {patch['key'] for patch in
+                                   game_data['tokens'].values() if
+                                   patch['location'].startswith(f"square_{player['color']}")}
 
-    player_html = soup.find('div', id="player_boards")
-    player = {}
+    patches = {}
+    for id_ in Market.patch_keys:
+        patches[id_] = game_data['tokens'][id_] | game_data['token_types'][id_]
 
-    for player_board in player_html.findChildren("div", class_="player-board"):
-        player_id = int(player_board["id"].split("_")[-1])
-        current_player = player_html.findChild("div", id=f"avatar_active_wrap_{player_id}")['style']
-        player_ref = player_board.findChild("a")
-        player_name = player_ref.text
-        player_color_code = player_ref["style"].split("#")[-1]
+    turn_number = max(
+        [int(log_id) for log_id in driver.execute_script("return window.gameui.log_to_move_id;").values()])
 
-        time_counter = player_board.findChild("div", class_="time_counter mini_counter").text
-        button_counter = player_board.findChild("div", class_="buttons_counter mini_counter").text
-        income_counter = player_board.findChild("div", class_="income_counter subtext mini_counter").text
-        empty_spaces_counter = player_board.findChild("div", class_="empties_counter mini_counter").text
-        special7x7 = player_board.findChild("div", id="tile_special7x7")
-
-        owned_patches = get_owned_patches(soup, player_color_code)
-
-        player[player_id] = {
-            "current_player": current_player == 'display: block;',
-            "name": player_name,
-            "time_counter": time_counter,
-            "button_counter": button_counter,
-            "income_counter": income_counter,
-            "color_code": player_color_code,
-            "empty_spaces": empty_spaces_counter,
-            "owned_pieces": owned_patches,
-            "special7x7": (special7x7 is not None),
-        }
-
-    return patches, int(token['data-order']), player
+    return turn_number, patches, game_data['tokens']['token_neutral']['state'], players
 
 
-class turn_ended(object):
-
-    def __init__(self, locator):
-        self.locator = locator
-
-    def __call__(self, driver):
-        state_text: str = driver.find_element(*self.locator).text
-        return not state_text.endswith("must take an action")
-
-
-class turn_starts(object):
-
-    def __init__(self, locator):
-        self.locator = locator
-
-    def __call__(self, driver):
-        state_text: str = driver.find_element(*self.locator).text
-        return state_text.endswith("must take an action")
-
-
-def init_game(patches: Dict, token_position: int, players: Dict) -> (TimeTrack, Patches, Player, Player):
-    print("Init data structure...")
-    pieces = Patches(patches, token_position)
-    popitem = players.popitem()
-    p1 = Player(popitem[0], popitem[1])
-    popitem = players.popitem()
-    p2 = Player(popitem[0], popitem[1])
+def init_game(patches: Dict, token_position, players: Dict) -> (TimeTrack, Market, Player, Player):
+    click.echo("Init data structure...")
+    pieces = Market(patches, token_position)
+    player1 = players.popitem()[1]
+    player2 = players.popitem()[1]
+    track = TimeTrack([player1, player2])
+    p1 = Player(player1, track)
+    p2 = Player(player2, track)
     return pieces, p1, p2
 
 
@@ -157,22 +115,36 @@ def print_game_status(p1, p2):
 
 
 def get_active_player(p1, p2):
-    active_player: Player = p1 if p1.my_turn else p2
+    active_player: Player = p1 if p1.my_turn() else p2
     click.secho(f"{active_player.player_name}'s turn", fg=get_player_color(active_player), nl=False)
     click.echo(f" ({active_player.status()})\n")
     return active_player
 
 
-def process_player_choice(active_player, driver, results, statistics):
-    before_owned_patches = active_player.owned_patches
+def process_player_choice(turn, active_player, driver, results, statistics):
     driver_wait = WebDriverWait(driver, 180)
-    driver_wait.until(turn_ended((By.ID, 'pagemaintitletext')))
-    driver_wait.until(turn_starts((By.ID, 'pagemaintitletext')))
-    soup = get_soup(driver)
-    current_owned_patches = get_owned_patches(soup, active_player.color_code)
-    bought = (set(current_owned_patches) - set(before_owned_patches))
+
+    def wait_for_turn(current_turn, player: Player):
+        def _predicate(driver):
+            data = driver.execute_script("return window.gameui.gamedatas;")
+            next_turn = max(
+                [int(log_id) for log_id in driver.execute_script("return window.gameui.log_to_move_id;").values()])
+            if int(data['gamestate']['id']) == 2 and current_turn + 1 == next_turn:
+                current_owned_patches = {patch['key'] for patch in data['tokens'].values() if
+                                         patch['location'].startswith(f"square_{player.color_code}")}
+                newly_bought = current_owned_patches - set(player.owned_patches)
+                if newly_bought:
+                    return newly_bought
+                else:
+                    return True
+            else:
+                return False
+
+        return _predicate
+
+    bought = driver_wait.until(wait_for_turn(turn, active_player))
     click.clear()
-    if bought:
+    if isinstance(bought, Set):
         assert len(bought) == 1, bought
         bought_patch_id = bought.pop()
         for i in range(3):
@@ -203,7 +175,7 @@ def process_player_choice(active_player, driver, results, statistics):
     click.echo()
 
 
-def print_suggestion(results):
+def print_suggestion(turn, results):
     winner_index = results['winner-index']
     candidates = []
     non_affordable = []
@@ -241,12 +213,12 @@ def print_suggestion(results):
     click.echo()
 
     if winner_index is not None:
-        click.secho(f"Suggested patch: ", nl=False, fg='green')
-        click.secho(f"{winner_index + 1} => rate: {results[winner_index]['button-rate']}",
+        click.secho(f"Suggested patch (turn {turn}): ", nl=False, fg='green')
+        click.secho(f"{winner_index}{'rd' if winner_index == 3 else 'st'} piece => rate: {results[winner_index]['button-rate']}",
                     nl=False, fg='green', bold=True, underline=True)
         click.secho(f" ({results[winner_index]['patch']})")
     else:
-        click.secho("No valid canidate => advance", fg='red')
+        click.secho("No valid candidate => advance", fg='red')
 
 
 def print_delimiter(nl=False):
@@ -270,14 +242,14 @@ def go_play(url):
         click.clear()
         while True:
             print_delimiter()
-            patches, token_position, players = read_game_state(driver)
+            turn, patches, token_position, players = read_game_state(driver)
             pieces, p1, p2 = init_game(patches, token_position, players)
             print_delimiter(True)
             active_player: Player = get_active_player(p1, p2)
             print_game_status(p1, p2)
             results = active_player.calculate_turn(pieces)
-            print_suggestion(results)
-            process_player_choice(active_player, driver, results, statistics)
+            print_suggestion(turn, results)
+            process_player_choice(turn, active_player, driver, results, statistics)
             print_statistics(p1, p2, statistics)
 
 
