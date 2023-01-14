@@ -105,7 +105,7 @@ class TimeTrack:
         return self._goal_id - self.get_time(player)
 
     def get_current_player_number(self):
-        return min(self.markers.items(), key=lambda player: player[1]["location"] + player[1]["top"])[0]
+        return min(self.markers.items(), key=lambda player: player[1]["location"] - player[1]["top"])[0]
 
 
 class Player:
