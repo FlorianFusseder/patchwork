@@ -1,9 +1,7 @@
-import time
-from typing import Dict, Set
+from typing import Dict
 
 import click
 from PIL import ImageColor
-from bs4 import BeautifulSoup
 from selenium.webdriver import Firefox
 from selenium.webdriver.common.by import By
 from selenium.webdriver.firefox.options import Options
@@ -12,24 +10,20 @@ from selenium.webdriver.support.wait import WebDriverWait
 from components import Market, Player, TimeTrack
 
 
-def get_soup(driver):
-    element = driver.find_element(By.ID, "overall-content")
-    html = element.get_attribute('outerHTML')
-    soup = BeautifulSoup(html, "html.parser")
-    return soup
+def wait_for_player_turn():
+    def _predicate(driver):
+        """Next turn ca start if next player has to start an action"""
+        state_text = driver.find_element(By.ID, "pagemaintitletext").text
+        return state_text.endswith("must take an action")
+
+    return _predicate
 
 
 def read_game_state(driver):
     click.echo("Read data...")
+    WebDriverWait(driver, 30).until(wait_for_player_turn())
 
-    def wait_for_turn():
-        def _predicate(driver):
-            data = driver.execute_script("return window.gameui.gamedatas;")
-            return data if int(data['gamestate']['id']) == 2 else False
-
-        return _predicate
-
-    game_data = WebDriverWait(driver, 30).until(wait_for_turn())
+    game_data = driver.execute_script("return window.gameui.gamedatas;")
 
     players = game_data['players']
     for key, player in players.items():
@@ -51,10 +45,8 @@ def read_game_state(driver):
     for id_ in Market.patch_keys:
         patches[id_] = game_data['tokens'][id_] | game_data['token_types'][id_]
 
-    turn_number = max(
-        [int(log_id) for log_id in driver.execute_script("return window.gameui.log_to_move_id;").values()])
-
-    return turn_number, patches, game_data['tokens']['token_neutral']['state'], players
+    turn = driver.find_element(By.ID, "move_nbr").text
+    return int(turn), patches, game_data['tokens']['token_neutral']['state'], players
 
 
 def init_game(patches: Dict, token_position, players: Dict) -> (TimeTrack, Market, Player, Player):
@@ -122,31 +114,25 @@ def get_active_player(p1, p2):
 
 
 def process_player_choice(turn, active_player, driver, results, statistics):
-    driver_wait = WebDriverWait(driver, 180)
-
-    def wait_for_turn(current_turn, player: Player):
+    def wait_move_nbr_increase(current_turn):
         def _predicate(driver):
-            data = driver.execute_script("return window.gameui.gamedatas;")
-            next_turn = max(
-                [int(log_id) for log_id in driver.execute_script("return window.gameui.log_to_move_id;").values()])
-            if int(data['gamestate']['id']) == 2 and current_turn + 1 == next_turn:
-                current_owned_patches = {patch['key'] for patch in data['tokens'].values() if
-                                         patch['location'].startswith(f"square_{player.color_code}")}
-                newly_bought = current_owned_patches - set(player.owned_patches)
-                if newly_bought:
-                    return newly_bought
-                else:
-                    return True
-            else:
-                return False
+            turn_nbr_ = driver.find_element(By.ID, "move_nbr").text
+            return int(turn_nbr_) == current_turn + 1
 
         return _predicate
 
-    bought = driver_wait.until(wait_for_turn(turn, active_player))
+    WebDriverWait(driver, 180).until(wait_move_nbr_increase(turn))
+    WebDriverWait(driver, 180).until(wait_for_player_turn())
+
+    data = driver.execute_script("return window.gameui.gamedatas;")
+    current_owned_patches = {patch['key'] for patch in data['tokens'].values() if
+                             patch['location'].startswith(f"square_{active_player.color_code}")}
+    newly_bought = current_owned_patches - set(active_player.owned_patches) - Market.special_patch_keys
+
     click.clear()
-    if isinstance(bought, Set):
-        assert len(bought) == 1, bought
-        bought_patch_id = bought.pop()
+    if newly_bought:
+        assert len(newly_bought) == 1, newly_bought
+        bought_patch_id = newly_bought.pop()
         for i in range(3):
             result_dict = results[i]
             if result_dict['patch'].id_ == bought_patch_id:
@@ -214,7 +200,18 @@ def print_suggestion(turn, results):
 
     if winner_index is not None:
         click.secho(f"Suggested patch (turn {turn}): ", nl=False, fg='green')
-        click.secho(f"{winner_index}{'rd' if winner_index == 3 else 'st'} piece => rate: {results[winner_index]['button-rate']}",
+
+        match winner_index:
+            case 0:
+                winner_string = "1st"
+            case 1:
+                winner_string = "2nd"
+            case 2:
+                winner_string = "3rd"
+            case _:
+                raise ValueError("Winner index has to be 1, 2 or 3")
+
+        click.secho(f"{winner_string} piece => rate: {results[winner_index]['button-rate']}",
                     nl=False, fg='green', bold=True, underline=True)
         click.secho(f" ({results[winner_index]['patch']})")
     else:
