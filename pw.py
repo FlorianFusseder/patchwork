@@ -66,7 +66,7 @@ def print_statistics(player1, player2, statistics):
 
     def print_(player, other_player):
         if player.player_name in statistics and 'chart' in statistics[player.player_name]:
-            click.secho(f"{player.player_name}'s ", fg=get_player_color(player), nl=False)
+            click.secho(f"{player.player_name}'s ", fg=player.get_player_color(), nl=False)
             click.echo("Ø button-rate: ", nl=False)
             p1_button_rates = all_button_rates(player)
             p1_avg = sum(p1_button_rates) / len(p1_button_rates)
@@ -83,10 +83,6 @@ def print_statistics(player1, player2, statistics):
     click.echo()
 
 
-def get_player_color(player):
-    return ImageColor.getcolor(f"#{player.color_code}", "RGB")
-
-
 def print_game_status(p1, p2):
     def get_color(p1_, p2_):
         if p1_.score > p2_.score:
@@ -97,7 +93,7 @@ def print_game_status(p1, p2):
             return 'yellow'
 
     def print_(p1_, p2_):
-        click.secho(f"{p1_.player_name}", fg=get_player_color(p1_), nl=False)
+        click.secho(f"{p1_.player_name}", fg=p1_.get_player_color(), nl=False)
         click.echo("'s score: ", nl=False)
         click.secho(p1_.score, bg=(get_color(p1_, p2_)), fg='black')
 
@@ -108,7 +104,7 @@ def print_game_status(p1, p2):
 
 def get_active_player(p1, p2):
     active_player: Player = p1 if p1.my_turn() else p2
-    click.secho(f"{active_player.player_name}'s turn", fg=get_player_color(active_player), nl=False)
+    click.secho(f"{active_player.player_name}'s turn", fg=active_player.get_player_color(), nl=False)
     click.echo(f" ({active_player.status()})\n")
     return active_player
 
@@ -141,7 +137,7 @@ def process_player_choice(turn, active_player, driver, results, statistics):
                     .setdefault("chart", []) \
                     .append((result_dict['patch'], result_dict['button-rate']))
 
-                click.secho(f"{active_player.player_name} ", fg=get_player_color(active_player), nl=False)
+                click.secho(f"{active_player.player_name} ", fg=active_player.get_player_color(), nl=False)
                 bought_best = results['winner-index'] == i
                 click.secho(
                     f"bought {'optimal' if bought_best else 'suboptimal'} patch {i + 1} with button-rate: ",
@@ -156,7 +152,7 @@ def process_player_choice(turn, active_player, driver, results, statistics):
                     click.secho(f"{results[results['winner-index']]['button-rate']:.2f}", bg='green', fg='black')
                 break
     else:
-        click.secho(f"{active_player.player_name}", fg=get_player_color(active_player), nl=False)
+        click.secho(f"{active_player.player_name}", fg=active_player.get_player_color(), nl=False)
         click.echo(" traded buttons for time!")
     click.echo()
 

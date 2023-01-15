@@ -1,6 +1,7 @@
 from typing import Dict, List
 
 import numpy as np
+from PIL import ImageColor
 
 
 class Patch:
@@ -39,7 +40,7 @@ class Market:
         "patch_26", "patch_27", "patch_28", "patch_29", "patch_30", "patch_31", "patch_32", "patch_33"
     }
 
-    special_patch_keys = {"patch_0_0", "patch_0_1", "patch_0_2", "patch_0_3"}
+    special_patch_keys = {"patch_0_0", "patch_0_1", "patch_0_2", "patch_0_3", "patch_0_4"}
 
     def __init__(self, patches, token_position) -> None:
         self.collection = []
@@ -161,3 +162,6 @@ class Player:
 
     def my_turn(self):
         return self.player_number == self.track.get_current_player_number()
+
+    def get_player_color(player):
+        return ImageColor.getcolor(f"#{player.color_code}", "RGB")
