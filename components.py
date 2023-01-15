@@ -163,5 +163,5 @@ class Player:
     def my_turn(self):
         return self.player_number == self.track.get_current_player_number()
 
-    def get_player_color(player):
-        return ImageColor.getcolor(f"#{player.color_code}", "RGB")
+    def get_player_color(self):
+        return ImageColor.getcolor(f"#{self.color_code}", "RGB")

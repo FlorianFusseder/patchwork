@@ -1,7 +1,6 @@
 from typing import Dict
 
 import click
-from PIL import ImageColor
 from selenium.webdriver import Firefox
 from selenium.webdriver.common.by import By
 from selenium.webdriver.firefox.options import Options
