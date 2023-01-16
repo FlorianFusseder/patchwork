@@ -6,7 +6,8 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.firefox.options import Options
 from selenium.webdriver.support.wait import WebDriverWait
 
-from components import Market, Player, TimeTrack
+import engine_stragegies
+from components import Market, Player, TimeTrack, Patch, TurnAction, GameState, AbstractGameState
 
 
 def wait_for_player_turn():
@@ -48,15 +49,15 @@ def read_game_state(driver):
     return int(turn), patches, game_data['tokens']['token_neutral']['state'], players
 
 
-def init_game(patches: Dict, token_position, players: Dict) -> (TimeTrack, Market, Player, Player):
+def init_game(patches: Dict, token_position, players: Dict) -> (Market, Player, Player, TimeTrack):
     click.echo("Init data structure...")
     pieces = Market(patches, token_position)
     player1 = players.popitem()[1]
     player2 = players.popitem()[1]
     track = TimeTrack([player1, player2])
-    p1 = Player(player1, track)
-    p2 = Player(player2, track)
-    return pieces, p1, p2
+    p1 = Player(player1)
+    p2 = Player(player2)
+    return pieces, p1, p2, track
 
 
 def print_statistics(player1, player2, statistics):
@@ -82,33 +83,45 @@ def print_statistics(player1, player2, statistics):
     click.echo()
 
 
-def print_game_status(p1, p2):
+def print_game_status(p1, p2, track):
+    p1_score = p1.get_current_score(track)
+    p2_score = p2.get_current_score(track)
+
     def get_color(p1_, p2_):
-        if p1_.score > p2_.score:
+        if p1_ > p2_:
             return 'green'
-        elif p1_.score < p2_.score:
+        elif p1_ < p2_:
             return 'red'
         else:
             return 'yellow'
 
-    def print_(p1_, p2_):
+    def print_(p1_, p1_score, p2_score):
         click.secho(f"{p1_.player_name}", fg=p1_.get_player_color(), nl=False)
         click.echo("'s score: ", nl=False)
-        click.secho(p1_.score, bg=(get_color(p1_, p2_)), fg='black')
+        click.secho(p1_score, bg=(get_color(p1_score, p2_score)), fg='black')
 
-    print_(p1, p2)
-    print_(p2, p1)
+    print_(p1, p1_score, p2_score)
+    print_(p2, p2_score, p1_score)
     click.echo()
 
 
-def get_active_player(p1, p2):
-    active_player: Player = p1 if p1.my_turn() else p2
+def get_active_player(p1, p2, track):
+    active_player: Player
+    non_active_player: Player
+
+    if p1.my_turn(track):
+        active_player = p1
+        non_active_player = p2
+    else:
+        active_player = p2
+        non_active_player = p1
+
     click.secho(f"{active_player.player_name}'s turn", fg=active_player.get_player_color(), nl=False)
-    click.echo(f" ({active_player.status()})\n")
-    return active_player
+    click.echo(f" ({active_player.status(track)})\n")
+    return active_player, non_active_player
 
 
-def process_player_choice(turn, active_player, driver, results, statistics):
+def wait_for_player_choice(turn, active_player, driver, calculated_game_state: AbstractGameState, market: Market):
     def wait_move_nbr_increase(current_turn):
         def _predicate(driver):
             turn_nbr_ = driver.find_element(By.ID, "move_nbr").text
@@ -125,92 +138,24 @@ def process_player_choice(turn, active_player, driver, results, statistics):
     newly_bought = current_owned_patches - set(active_player.owned_patches) - Market.special_patch_keys
 
     click.clear()
+    chosen_action: TurnAction
     if newly_bought:
         assert len(newly_bought) == 1, newly_bought
         bought_patch_id = newly_bought.pop()
-        for i in range(3):
-            result_dict = results[i]
-            if result_dict['patch'].id_ == bought_patch_id:
-                statistics \
-                    .setdefault(active_player.player_name, {}) \
-                    .setdefault("chart", []) \
-                    .append((result_dict['patch'], result_dict['button-rate']))
-
-                click.secho(f"{active_player.player_name} ", fg=active_player.get_player_color(), nl=False)
-                bought_best = results['winner-index'] == i
-                click.secho(
-                    f"bought {'optimal' if bought_best else 'suboptimal'} patch {i + 1} with button-rate: ",
-                    fg=('green' if bought_best else 'yellow'), nl=False)
-                click.secho(f"{result_dict['button-rate']:.2f}", bg=('green' if bought_best else 'yellow'), fg='black',
-                            nl=False)
-                if bought_best:
-                    click.echo()
-                else:
-                    click.echo(" instead of ", nl=False)
-                    click.secho(f"Patch {results['winner-index'] + 1} with button-rate: ", fg='green', nl=False)
-                    click.secho(f"{results[results['winner-index']]['button-rate']:.2f}", bg='green', fg='black')
-                break
+        click.secho(f"{active_player.player_name} ", fg=active_player.get_player_color(), nl=False)
+        taken = next((i, p) for i, p in enumerate(market.get_next_three()) if p.id_ == bought_patch_id)
+        click.echo(f"bought patch: {taken}")
+        chosen_action = TurnAction(taken[0])
     else:
         click.secho(f"{active_player.player_name}", fg=active_player.get_player_color(), nl=False)
         click.echo(" traded buttons for time!")
-    click.echo()
+        chosen_action = TurnAction.ADVANCE
 
-
-def print_suggestion(turn, results):
-    winner_index = results['winner-index']
-    candidates = []
-    non_affordable = []
-    low_button_rate = []
-
-    def print_(lst):
-        [click.echo(f"\tRate of {elem[0] + 1} => {elem[1]['button-rate']:.3f}\t({elem[1]['patch']})") for elem in
-         lst]
-
-    for i in range(3):
-        patch = results[i]
-        _list = None
-        if patch['affordable'] and patch['button-rate'] > 1:
-            _list = candidates
-        elif patch['affordable'] and patch['button-rate'] <= 1:
-            _list = low_button_rate
-        elif not patch['affordable']:
-            _list = non_affordable
-        else:
-            Exception(f"Patch not categorizable: {patch}")
-
-        _list.append((i, patch))
-
-    if candidates:
-        candidates.sort(key=lambda x: x[1]['button-rate'], reverse=True)
-        click.echo("Affordable:")
-        print_(candidates)
-    if non_affordable:
-        click.echo("Omitted due to cost:")
-        print_(non_affordable)
-    if low_button_rate:
-        click.echo("Omitted due to button-rate:")
-        print_(low_button_rate)
-
-    click.echo()
-
-    if winner_index is not None:
-        click.secho(f"Suggested patch (turn {turn}): ", nl=False, fg='green')
-
-        match winner_index:
-            case 0:
-                winner_string = "1st"
-            case 1:
-                winner_string = "2nd"
-            case 2:
-                winner_string = "3rd"
-            case _:
-                raise ValueError("Winner index has to be 1, 2 or 3")
-
-        click.secho(f"{winner_string} piece => rate: {results[winner_index]['button-rate']}",
-                    nl=False, fg='green', bold=True, underline=True)
-        click.secho(f" ({results[winner_index]['patch']})")
+    click.secho(f"{active_player.player_name} ", fg=active_player.get_player_color(), nl=False)
+    if chosen_action == calculated_game_state.get_recommended_turn_action():
+        click.echo("choose wisely", fg='green')
     else:
-        click.secho("No valid candidate => advance", fg='red')
+        click.echo("choose poorly", fg='red')
 
 
 def print_delimiter(nl=False):
@@ -221,12 +166,15 @@ def print_delimiter(nl=False):
 
 @click.command()
 @click.argument("url")
-def go_play(url):
+@click.option("--strategy", "-s", default="greedy", help="Turn calculation Algorithm", type=click.Choice(["greedy"], case_sensitive=False))
+@click.option("--depth", "-d", default=3, help="Depth for movement calculation", type=int)
+def go_play(url, strategy, depth):
     options = Options()
     options.add_argument('--headless')
-    statistics = {}
     click.clear()
     with Firefox(options=options) as driver:
+        click.echo(f"Using {strategy} algorithm with depth {depth}")
+        strategy = engine_stragegies.strategies[strategy.lower()]
         click.echo(f"Starting Browser...")
         driver.start_client()
         click.echo(f"Trying to connect to {url}... (this takes a while)")
@@ -235,14 +183,15 @@ def go_play(url):
         while True:
             print_delimiter()
             turn, patches, token_position, players = read_game_state(driver)
-            pieces, p1, p2 = init_game(patches, token_position, players)
+            pieces, p1, p2, track = init_game(patches, token_position, players)
             print_delimiter(True)
-            active_player: Player = get_active_player(p1, p2)
-            print_game_status(p1, p2)
-            results = active_player.calculate_turn(pieces)
-            print_suggestion(turn, results)
-            process_player_choice(turn, active_player, driver, results, statistics)
-            print_statistics(p1, p2, statistics)
+            active_player: Player
+            non_active_player: Player
+            active_player, non_active_player = get_active_player(p1, p2, track)
+            print_game_status(p1, p2, track)
+            calculated_game_state: AbstractGameState = strategy.calculate_turn(p1, p2, pieces, track, depth)
+            click.echo(f"Best Turn: {calculated_game_state.get_recommended_turn_action()}")
+            wait_for_player_choice(turn, active_player, driver, calculated_game_state, pieces)
 
 
 if __name__ == "__main__":
