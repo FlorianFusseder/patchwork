@@ -30,8 +30,7 @@ def read_game_state(driver):
         player['income'] = game_data['counters'][f"income_{player['color']}_counter"]['counter_value']
         player['empty_spaces'] = game_data['counters'][f"empties_{player['color']}_counter"]['counter_value']
         player['players_turn'] = (game_data['gamestate']['active_player'] == player['id'])
-        player['buttons'] = sum(
-            [1 for token in game_data['tokens'].values() if token['location'] == f"buttons_{player['color']}"])
+        player['buttons'] = sum([1 for token in game_data['tokens'].values() if token['location'] == f"buttons_{player['color']}"])
         player['time_marker'] = {
             'location': int(game_data['tokens'][f'timemarker_{player["color"]}']['location'].split('_')[1]),
             'top': game_data['tokens'][f'timemarker_{player["color"]}']['state']
@@ -55,8 +54,8 @@ def init_game(patches: Dict, token_position, players: Dict) -> (Market, Player, 
     player1 = players.popitem()[1]
     player2 = players.popitem()[1]
     track = TimeTrack([player1, player2])
-    p1 = Player(player1)
-    p2 = Player(player2)
+    p1 = Player(player1 if player1["no"] == "1" else player2)
+    p2 = Player(player1 if player1["no"] == "2" else player2)
     return pieces, p1, p2, track
 
 
@@ -143,7 +142,7 @@ def wait_for_player_choice(turn, active_player, driver, calculated_game_state: A
         assert len(newly_bought) == 1, newly_bought
         bought_patch_id = newly_bought.pop()
         click.secho(f"{active_player.player_name} ", fg=active_player.get_player_color(), nl=False)
-        taken = next((i, p) for i, p in enumerate(market.get_next_three()) if p.id_ == bought_patch_id)
+        taken = next((i, p) for i, p in enumerate(market[0:3]) if p.id_ == bought_patch_id)
         click.echo(f"bought patch: {taken}")
         chosen_action = TurnAction(taken[0])
     else:
@@ -190,7 +189,7 @@ def go_play(url, strategy, depth):
             active_player, non_active_player = get_active_player(p1, p2, track)
             print_game_status(p1, p2, track)
             calculated_game_state: AbstractGameState = strategy.calculate_turn(p1, p2, pieces, track, depth)
-            click.echo(f"Best Turn: {calculated_game_state.get_recommended_turn_action()}")
+            calculated_game_state.print_outcome()
             wait_for_player_choice(turn, active_player, driver, calculated_game_state, pieces)
 
 
