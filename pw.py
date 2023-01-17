@@ -7,7 +7,7 @@ from selenium.webdriver.firefox.options import Options
 from selenium.webdriver.support.wait import WebDriverWait
 
 import engine_stragegies
-from components import Market, Player, TimeTrack, Patch, TurnAction, GameState, AbstractGameState
+from components import Market, Player, TimeTrack, TurnAction, GameState
 
 
 def wait_for_player_turn():
@@ -53,36 +53,17 @@ def init_game(patches: Dict, token_position, players: Dict) -> (Market, Player, 
     pieces = Market(patches, token_position)
     player1 = players.popitem()[1]
     player2 = players.popitem()[1]
-    track = TimeTrack([player1, player2])
-    p1 = Player(player1 if player1["no"] == "1" else player2)
-    p2 = Player(player1 if player1["no"] == "2" else player2)
+    p1 = Player(player1)
+    p2 = Player(player2)
+    track = TimeTrack()
     return pieces, p1, p2, track
 
 
-def print_statistics(player1, player2, statistics):
-    def all_button_rates(player):
-        return [bought_piece[1] for bought_piece in statistics[player.player_name]['chart']]
+def print_game_status(p1, p2, track) -> Player:
+    active_player: Player = p1 if p1.player_turn else p2
+    click.secho(f"{active_player.player_name}'s turn", fg=active_player.get_player_color(), nl=False)
+    click.echo(f" ({active_player.status(track)})\n")
 
-    def print_(player, other_player):
-        if player.player_name in statistics and 'chart' in statistics[player.player_name]:
-            click.secho(f"{player.player_name}'s ", fg=player.get_player_color(), nl=False)
-            click.echo("Ø button-rate: ", nl=False)
-            p1_button_rates = all_button_rates(player)
-            p1_avg = sum(p1_button_rates) / len(p1_button_rates)
-            p2_avg = None
-            if other_player.player_name in statistics and 'chart' in statistics[other_player.player_name]:
-                p2_button_rates = all_button_rates(other_player)
-                p2_avg = sum(p2_button_rates) / len(p2_button_rates)
-            click.secho(f"{p1_avg:.2f}", bg=('green' if not p2_avg or p1_avg >= p2_avg else 'red'), fg='black',
-                        nl=False)
-            click.echo(f"\t(history: {', '.join([str(round(r, 2)) for r in p1_button_rates])})")
-
-    print_(player1, player2)
-    print_(player2, player1)
-    click.echo()
-
-
-def print_game_status(p1, p2, track):
     p1_score = p1.get_current_score(track)
     p2_score = p2.get_current_score(track)
 
@@ -102,25 +83,10 @@ def print_game_status(p1, p2, track):
     print_(p1, p1_score, p2_score)
     print_(p2, p2_score, p1_score)
     click.echo()
+    return active_player
 
 
-def get_active_player(p1, p2, track):
-    active_player: Player
-    non_active_player: Player
-
-    if p1.my_turn(track):
-        active_player = p1
-        non_active_player = p2
-    else:
-        active_player = p2
-        non_active_player = p1
-
-    click.secho(f"{active_player.player_name}'s turn", fg=active_player.get_player_color(), nl=False)
-    click.echo(f" ({active_player.status(track)})\n")
-    return active_player, non_active_player
-
-
-def wait_for_player_choice(turn, active_player, driver, calculated_game_state: AbstractGameState, market: Market):
+def wait_for_player_choice(turn, active_player, driver, calculated_game_state: GameState, market: Market):
     def wait_move_nbr_increase(current_turn):
         def _predicate(driver):
             turn_nbr_ = driver.find_element(By.ID, "move_nbr").text
@@ -184,11 +150,8 @@ def go_play(url, strategy, depth):
             turn, patches, token_position, players = read_game_state(driver)
             pieces, p1, p2, track = init_game(patches, token_position, players)
             print_delimiter(True)
-            active_player: Player
-            non_active_player: Player
-            active_player, non_active_player = get_active_player(p1, p2, track)
-            print_game_status(p1, p2, track)
-            calculated_game_state: AbstractGameState = strategy.calculate_turn(p1, p2, pieces, track, depth)
+            active_player: Player = print_game_status(p1, p2, track)
+            calculated_game_state: GameState = strategy.calculate_turn(p1, p2, pieces, track, depth)
             calculated_game_state.print_outcome()
             wait_for_player_choice(turn, active_player, driver, calculated_game_state, pieces)
 
