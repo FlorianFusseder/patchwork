@@ -1,5 +1,6 @@
 import copy
 from abc import ABC, abstractmethod
+from multiprocessing import Pool
 from typing import Dict, Optional
 
 from components import Player, Market, TimeTrack, GameState, TurnAction
@@ -26,11 +27,11 @@ class EngineStrategy(ABC):
         pass
 
 
-class GreedyStrategy(EngineStrategy):
+class GreedySingleCoreStrategy(EngineStrategy):
 
     @property
     def name(self) -> str:
-        return "Greedy"
+        return "greedy_single_core"
 
     def calculate_turn(self, player1: Player, player2: Player, patches: Market, track: TimeTrack, max_depth: int) -> GameState:
         game_state = GameState(player1, player2, patches, track)
@@ -67,8 +68,40 @@ class GreedyStrategy(EngineStrategy):
                             and candidate_outcome[player.player_number] > current_outcome[player.player_number] else current_best
 
 
-greedy = GreedyStrategy()
+class GreedyFourCoreStrategy(GreedySingleCoreStrategy):
+
+    @property
+    def name(self) -> str:
+        return "greedy_four_core"
+
+    def calculate_turn(self, player1: Player, player2: Player, patches: Market, track: TimeTrack, max_depth: int) -> GameState:
+        pool = Pool(4)
+        game_state = GameState(player1, player2, patches, track)
+
+        args = []
+        for turn_action in TurnAction:
+            if not game_state.turn_action_possible(turn_action):
+                continue
+
+            game_state_copy = copy.deepcopy(game_state)
+            game_state_copy.execute_turn(turn_action)
+
+            if not game_state_copy.game_end():
+                args.append((game_state_copy, max_depth, 1))
+
+        game_states = pool.starmap(self.calculate_state, args)
+
+        current_winner = game_states.pop()
+        for candidate in game_states:
+            current_winner = self.choose_winner(current_winner.player, current_winner.opponent, current_winner, candidate)
+
+        return current_winner
+
+
+greedy_s = GreedySingleCoreStrategy()
+greedy_f = GreedyFourCoreStrategy()
 
 strategies: Dict[str, EngineStrategy] = {
-    greedy.name.lower(): greedy,
+    greedy_s.name.lower(): greedy_s,
+    greedy_f.name.lower(): greedy_f,
 }
