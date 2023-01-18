@@ -1,8 +1,7 @@
 from __future__ import annotations
 
-from abc import ABC, abstractmethod
 from enum import IntEnum
-from typing import Dict, List, Set
+from typing import Dict, Set, Optional
 
 import click
 import numpy as np
@@ -50,31 +49,107 @@ class Market:
 
     special_patch_keys = {"patch_0_0", "patch_0_1", "patch_0_2", "patch_0_3", "patch_0_4"}
 
+    class LinkedPatchList:
+
+        def __init__(self):
+            self.__head: Market.LinkedPatchList.Node = None
+            self.__tail: Market.LinkedPatchList.Node = None
+            self.__length = 0
+
+        class Node:
+            def __init__(self, patch: Patch):
+                self.patch: Patch = patch
+                self.next: Optional[Market.LinkedPatchList.Node] = None
+
+        def append(self, patch: Patch):
+            self.__length += 1
+            new_patch_node = Market.LinkedPatchList.Node(patch)
+            if not self.__head:
+                self.__head = new_patch_node
+                self.__tail = new_patch_node
+            else:
+                self.__tail.next = new_patch_node
+                self.__tail = new_patch_node
+
+        def pop(self, index: int):
+            if index > self.__length:
+                raise IndexError("Not enough elements left in LinkedList")
+            self.__length -= 1
+
+            for i in range(index, 0, -1):
+                new_head = self.__head.next
+                to_tail = self.__head
+                self.__head = new_head
+
+                to_tail.next = None
+                self.__tail.next = to_tail
+                self.__tail = to_tail
+
+            new_head = self.__head.next
+            patch = self.__head.patch
+            self.__head = new_head
+            return patch
+
+        def __len__(self):
+            return self.__length
+
+        def __getitem__(self, item):
+            if isinstance(item, int):
+                node = self.__head
+                for i in range(0, item):
+                    node = node.next
+                return node.patch
+            elif isinstance(item, slice):
+                patch_list = []
+                temp_head = self.__head
+                for i in range(slice.start):
+                    if temp_head.next:
+                        temp_head = temp_head.next
+                    else:
+                        raise IndexError()
+
+                for i in range(slice.start, slice.stop):
+                    if slice.step and i % slice.step != 0:
+                        continue
+
+                    patch_list.append(temp_head.patch)
+                    if temp_head.next:
+                        temp_head = temp_head.next
+                    else:
+                        raise IndexError
+
+                return patch_list
+
+        def __repr__(self):
+            st_repr = ""
+            next_ = self.__head
+            while next_.next:
+                st_repr += str(next_.patch) + "\n"
+                next_ = next_.next
+
+            st_repr += str(next_.patch) + "\n"
+
+            return st_repr
+
     def __init__(self, patches, token_position) -> None:
-        self.collection = []
-        self.token_position = int(token_position)
-        for patch in [patch for patch in sorted(patches.values(), key=lambda item: int(item['state'])) if
-                      patch['location'] == 'market']:
-            self.collection.append(Patch(patch))
+        self.__linked_patch_list = Market.LinkedPatchList()
+        token_position = int(token_position)
+        market_list = [patch for patch in sorted(patches.values(), key=lambda item: int(item['state'])) if patch['location'] == 'market']
+
+        for patch in market_list[token_position:] + market_list[0:token_position]:
+            self.__linked_patch_list.append(Patch(patch))
 
     def take_patch(self, patch_to_take: TurnAction) -> Patch:
-        taken_patch = self.collection.pop(int(patch_to_take + self.token_position))
-        self.token_position += patch_to_take
-        return taken_patch
-
-    def __len__(self):
-        return len(self.collection)
+        return self.__linked_patch_list.pop(patch_to_take)
 
     def __getitem__(self, item):
-        if isinstance(item, int):
-            return self.collection[self.token_position + item]
-        elif isinstance(item, slice):
-            if len(self.collection) - self.token_position < item.stop - 1:
-                raise IndexError
-            return self.collection[item.start + self.token_position: item.stop + self.token_position: item.step]
+        return self.__linked_patch_list[item]
 
     def __str__(self) -> str:
-        return "\n".join([str(p) for p in self.collection])
+        return "\n".join([str(p) for p in self.__linked_patch_list])
+
+    def __len__(self):
+        return len(self.__linked_patch_list)
 
 
 class TimeTrack:

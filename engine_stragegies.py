@@ -63,10 +63,8 @@ class GreedyStrategy(EngineStrategy):
         current_outcome = current_best.history[-1]
         candidate_outcome = candidate.history[-1]
 
-        return candidate if candidate_outcome[player.player_number] > candidate_outcome[opponent.player_number]\
+        return candidate if candidate_outcome[player.player_number] > candidate_outcome[opponent.player_number] \
                             and candidate_outcome[player.player_number] > current_outcome[player.player_number] else current_best
-
-
 
 
 greedy = GreedyStrategy()
