@@ -22,7 +22,7 @@ class EngineStrategy(ABC):
 
     @staticmethod
     @abstractmethod
-    def choose_winner(current_best: GameState, candidate: GameState):
+    def choose_winner(player: Player, opponent: Player, current_best: GameState, candidate: GameState):
         pass
 
 
@@ -49,24 +49,24 @@ class GreedyStrategy(EngineStrategy):
 
             if current_depth < max_depth and not game_state_copy.game_end():
                 contender = self.calculate_state(game_state_copy, max_depth, current_depth + 1)
-                best = self.choose_winner(best, contender)
+                best = self.choose_winner(game_state.player, game_state.opponent, best, contender)
             else:
-                best = self.choose_winner(best, game_state_copy)
+                best = self.choose_winner(game_state.player, game_state.opponent, best, game_state_copy)
 
         return best
 
     @staticmethod
-    def choose_winner(current_best: GameState, candidate: GameState):
+    def choose_winner(player: Player, opponent, current_best: GameState, candidate: GameState):
         if not current_best:
             return candidate
 
-        return candidate
+        current_outcome = current_best.history[-1]
+        candidate_outcome = candidate.history[-1]
 
-        # if True:
-        #     return candidate if candidate_game_state_final_score_p1 > candidate_game_state_final_score_p2 and \
-        #                         candidate_game_state_final_score_p1 > current_game_state_final_score_p1 else current_best
-        # else:
-        #     return candidate if candidate_game_state_final_score_p1 < candidate_game_state_final_score_p2 < current_game_state_final_score_p2 else current_best
+        return candidate if candidate_outcome[player.player_number] > candidate_outcome[opponent.player_number]\
+                            and candidate_outcome[player.player_number] > current_outcome[player.player_number] else current_best
+
+
 
 
 greedy = GreedyStrategy()

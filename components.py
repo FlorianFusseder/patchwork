@@ -202,6 +202,14 @@ class TurnAction(IntEnum):
 class GameState:
 
     @property
+    def player(self) -> Player:
+        return self.active_player if self.active_player.player_turn else self.passive_player
+
+    @property
+    def opponent(self) -> Player:
+        return self.active_player if not self.active_player.player_turn else self.passive_player
+
+    @property
     def active_player(self) -> Player:
         return self._active_player
 
@@ -250,10 +258,15 @@ class GameState:
             self.__advance(self.active_player)
         else:
             self.__take_patch(self.active_player, turn_action)
-        self._history.append((self.active_player, turn_action, self.active_player.get_current_score(self._track), self.passive_player.get_current_score(self._track)))
+        self._history.append({
+            self.active_player.player_number: self.active_player.get_current_score(self._track),
+            self.passive_player.player_number: self.passive_player.get_current_score(self._track),
+            "player_turn": self.active_player.player_number,
+            "turn_action": turn_action
+        })
 
     def determine_active_player(self):
-        if self.active_player.location_top + self.active_player.location < self.passive_player.location_top + self.passive_player.location:
+        if self.active_player.location - self.active_player.location_top > self.passive_player.location - self.passive_player.location_top:
             temp = self._active_player
             self._active_player = self.passive_player
             self._passive_player = temp
@@ -272,7 +285,8 @@ class GameState:
                 raise NotImplementedError(f"{turn_action} not yet implemented")
 
     def print_outcome(self):
-        click.echo(f"Best Turn choice: {self.history[0][1].name}")
+        click.secho(f"Best Turn choice: ", nl=False)
+        click.secho(f"{self.history[-1]['turn_action'].name}", bg='green', )
 
         def get_color(p1_, p2_):
             if p1_ > p2_:
@@ -285,7 +299,7 @@ class GameState:
         def print_(p1_, p1_score, p2_score):
             click.secho(f"{p1_.player_name}", fg=p1_.get_player_color(), nl=False)
             click.echo("'s score: ", nl=False)
-            click.secho(p1_score, bg=(get_color(p1_score, p2_score)), fg='black')
+            click.secho(p1_score, bg=(get_color(p1_score, p2_score)), fg='black', underline=True)
 
         p1_score = self.active_player.get_current_score(self._track)
         p2_score = self.passive_player.get_current_score(self._track)
@@ -295,8 +309,10 @@ class GameState:
 
         click.echo()
         click.echo("Calculated Path:")
-        for player, turn_action, p1_score, p2_score in self.history:
-            click.echo(f"{player.player_name}'s turn: {turn_action.name} ({self.active_player.player_name}: {p1_score}, {self.passive_player.player_name}: {p2_score})")
+        for item in self.history:
+            player_name = self.active_player.player_name if self.active_player.player_number == item["player_turn"] else self.passive_player.player_name
+            click.echo(f"{player_name}'s turn: {item['turn_action'].name} ({self.player.player_name}: "
+                       f"{item[self.player.player_number]}, {self.opponent.player_name}: {item[self.opponent.player_number]})")
 
         click.echo()
 
