@@ -106,7 +106,7 @@ def print_delimiter(nl=False):
 
 @click.command()
 @click.argument("url")
-@click.option("--strategy", "-s", default="greedy", help="Turn calculation Algorithm", type=click.Choice(["greedy"], case_sensitive=False))
+@click.option("--strategy", "-s", default="greedy_single_core", help="Turn calculation Algorithm", type=click.Choice(["greedy_single_core", "greedy_four_core"], case_sensitive=False))
 @click.option("--depth", "-d", default=3, help="Depth for movement calculation", type=int)
 def go_play(url, strategy, depth):
     options = Options()
