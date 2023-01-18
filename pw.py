@@ -60,7 +60,7 @@ def init_game(patches: Dict, token_position, players: Dict) -> (Market, Player, 
     return pieces, p1, p2, track
 
 
-def print_game_status(p1, p2, track) -> Player:
+def print_game_status(p1, p2, track):
     active_player: Player = p1 if p1.player_turn else p2
     click.secho(f"{active_player.player_name}'s turn", fg=active_player.get_player_color(), nl=False)
     click.echo(f" ({active_player.status(track)})")
@@ -84,10 +84,9 @@ def print_game_status(p1, p2, track) -> Player:
     print_(p1, p1_score, p2_score)
     print_(p2, p2_score, p1_score)
     click.echo()
-    return active_player
 
 
-def wait_for_player_choice(turn, active_player, driver, calculated_game_state: GameState, market: Market):
+def wait_for_player_choice(turn, driver):
     def wait_move_nbr_increase(current_turn):
         def _predicate(driver):
             turn_nbr_ = driver.find_element(By.ID, "move_nbr").text
@@ -126,12 +125,12 @@ def go_play(url, strategy, depth):
             turn, patches, token_position, players = read_game_state(driver)
             pieces, p1, p2, track = init_game(patches, token_position, players)
             print_delimiter(True)
-            active_player: Player = print_game_status(p1, p2, track)
+            print_game_status(p1, p2, track)
             timer = timeit.default_timer()
             calculated_game_state: GameState = strategy.calculate_turn(p1, p2, pieces, track, depth)
             click.secho(f"Time needed: {timeit.default_timer() - timer}\n")
             calculated_game_state.print_outcome()
-            wait_for_player_choice(turn, active_player, driver, calculated_game_state, pieces)
+            wait_for_player_choice(turn, driver)
 
 
 if __name__ == "__main__":
