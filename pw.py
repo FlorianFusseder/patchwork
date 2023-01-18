@@ -98,31 +98,6 @@ def wait_for_player_choice(turn, active_player, driver, calculated_game_state: G
     WebDriverWait(driver, 180).until(wait_move_nbr_increase(turn))
     WebDriverWait(driver, 180).until(wait_for_player_turn())
 
-    data = driver.execute_script("return window.gameui.gamedatas;")
-    current_owned_patches = {patch['key'] for patch in data['tokens'].values() if
-                             patch['location'].startswith(f"square_{active_player.color_code}")}
-    newly_bought = current_owned_patches - set(active_player.owned_patches) - Market.special_patch_keys
-
-    click.clear()
-    chosen_action: TurnAction
-    if newly_bought:
-        assert len(newly_bought) == 1, newly_bought
-        bought_patch_id = newly_bought.pop()
-        click.secho(f"{active_player.player_name} ", fg=active_player.get_player_color(), nl=False)
-        taken = next((i, p) for i, p in enumerate(market.get_patch_choices()) if p.id_ == bought_patch_id)
-        click.echo(f"bought patch: {taken}")
-        chosen_action = TurnAction(taken[0])
-    else:
-        click.secho(f"{active_player.player_name}", fg=active_player.get_player_color(), nl=False)
-        click.echo(" traded buttons for time!")
-        chosen_action = TurnAction.ADVANCE
-
-    click.secho(f"{active_player.player_name} ", fg=active_player.get_player_color(), nl=False)
-    if chosen_action == calculated_game_state.history[0]["player_turn"]:
-        click.secho("choose wisely", fg='green')
-    else:
-        click.secho("choose poorly", fg='red')
-
 
 def print_delimiter(nl=False):
     click.echo("-" * 50)
