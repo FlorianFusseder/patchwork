@@ -1,3 +1,4 @@
+import timeit
 from typing import Dict
 
 import click
@@ -53,8 +54,8 @@ def init_game(patches: Dict, token_position, players: Dict) -> (Market, Player, 
     pieces = Market(patches, token_position)
     player1 = players.popitem()[1]
     player2 = players.popitem()[1]
-    p1 = Player(player1)
-    p2 = Player(player2)
+    p1 = Player(player1, patches)
+    p2 = Player(player2, patches)
     track = TimeTrack()
     return pieces, p1, p2, track
 
@@ -117,10 +118,10 @@ def wait_for_player_choice(turn, active_player, driver, calculated_game_state: G
         chosen_action = TurnAction.ADVANCE
 
     click.secho(f"{active_player.player_name} ", fg=active_player.get_player_color(), nl=False)
-    if chosen_action == calculated_game_state.get_recommended_turn_action():
-        click.echo("choose wisely", fg='green')
+    if chosen_action == calculated_game_state.history[0]["player_turn"]:
+        click.secho("choose wisely", fg='green')
     else:
-        click.echo("choose poorly", fg='red')
+        click.secho("choose poorly", fg='red')
 
 
 def print_delimiter(nl=False):
@@ -151,7 +152,9 @@ def go_play(url, strategy, depth):
             pieces, p1, p2, track = init_game(patches, token_position, players)
             print_delimiter(True)
             active_player: Player = print_game_status(p1, p2, track)
+            timer = timeit.default_timer()
             calculated_game_state: GameState = strategy.calculate_turn(p1, p2, pieces, track, depth)
+            click.secho(f"Time needed: {timeit.default_timer() - timer}\n")
             calculated_game_state.print_outcome()
             wait_for_player_choice(turn, active_player, driver, calculated_game_state, pieces)
 

@@ -134,7 +134,7 @@ class Player:
         # Initial Player turn - do not change
         return self.__player_turn
 
-    def __init__(self, player_data: Dict):
+    def __init__(self, player_data: Dict, patch_data: Dict):
         self.player_id = player_data["id"]
         self.player_number = int(player_data["no"])
         self.__player_turn = player_data["players_turn"]
@@ -145,7 +145,7 @@ class Player:
         self.empty_spaces = int(player_data["empty_spaces"])
         self.owns_special7x7 = player_data["tile_special7x7"]
 
-        self.owned_patches: Set[Patch] = player_data["owned_patches"]
+        self.owned_patches: Set[Patch] = {Patch(patch_data[patch_name]) for patch_name in player_data["owned_patches"]}
 
         self.location = int(player_data["time_marker"]["location"])
         self.location_top = int(player_data["time_marker"]["top"])
@@ -286,7 +286,7 @@ class GameState:
 
     def print_outcome(self):
         click.secho(f"Best Turn choice: ", nl=False)
-        click.secho(f"{self.history[-1]['turn_action'].name}", bg='green', )
+        click.secho(f"{self.history[0]['turn_action'].name}", blink=True)
 
         def get_color(p1_, p2_):
             if p1_ > p2_:
