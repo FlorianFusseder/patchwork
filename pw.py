@@ -60,7 +60,7 @@ def init_game(patches: Dict, token_position, players: Dict) -> (Market, Player, 
     return pieces, p1, p2, track
 
 
-def print_game_status(p1, p2, track) -> Player:
+def print_game_status(p1, p2, track):
     active_player: Player = p1 if p1.player_turn else p2
     click.secho(f"{active_player.player_name}'s turn", fg=active_player.get_player_color(), nl=False)
     click.echo(f" ({active_player.status(track)})")
@@ -84,10 +84,9 @@ def print_game_status(p1, p2, track) -> Player:
     print_(p1, p1_score, p2_score)
     print_(p2, p2_score, p1_score)
     click.echo()
-    return active_player
 
 
-def wait_for_player_choice(turn, active_player, driver, calculated_game_state: GameState, market: Market):
+def wait_for_player_choice(turn, driver):
     def wait_move_nbr_increase(current_turn):
         def _predicate(driver):
             turn_nbr_ = driver.find_element(By.ID, "move_nbr").text
@@ -97,31 +96,6 @@ def wait_for_player_choice(turn, active_player, driver, calculated_game_state: G
 
     WebDriverWait(driver, 180).until(wait_move_nbr_increase(turn))
     WebDriverWait(driver, 180).until(wait_for_player_turn())
-
-    data = driver.execute_script("return window.gameui.gamedatas;")
-    current_owned_patches = {patch['key'] for patch in data['tokens'].values() if
-                             patch['location'].startswith(f"square_{active_player.color_code}")}
-    newly_bought = current_owned_patches - set(active_player.owned_patches) - Market.special_patch_keys
-
-    click.clear()
-    chosen_action: TurnAction
-    if newly_bought:
-        assert len(newly_bought) == 1, newly_bought
-        bought_patch_id = newly_bought.pop()
-        click.secho(f"{active_player.player_name} ", fg=active_player.get_player_color(), nl=False)
-        taken = next((i, p) for i, p in enumerate(market.get_patch_choices()) if p.id_ == bought_patch_id)
-        click.echo(f"bought patch: {taken}")
-        chosen_action = TurnAction(taken[0])
-    else:
-        click.secho(f"{active_player.player_name}", fg=active_player.get_player_color(), nl=False)
-        click.echo(" traded buttons for time!")
-        chosen_action = TurnAction.ADVANCE
-
-    click.secho(f"{active_player.player_name} ", fg=active_player.get_player_color(), nl=False)
-    if chosen_action == calculated_game_state.history[0]["player_turn"]:
-        click.secho("choose wisely", fg='green')
-    else:
-        click.secho("choose poorly", fg='red')
 
 
 def print_delimiter(nl=False):
@@ -151,12 +125,12 @@ def go_play(url, strategy, depth):
             turn, patches, token_position, players = read_game_state(driver)
             pieces, p1, p2, track = init_game(patches, token_position, players)
             print_delimiter(True)
-            active_player: Player = print_game_status(p1, p2, track)
+            print_game_status(p1, p2, track)
             timer = timeit.default_timer()
             calculated_game_state: GameState = strategy.calculate_turn(p1, p2, pieces, track, depth)
             click.secho(f"Time needed: {timeit.default_timer() - timer}\n")
             calculated_game_state.print_outcome()
-            wait_for_player_choice(turn, active_player, driver, calculated_game_state, pieces)
+            wait_for_player_choice(turn, driver)
 
 
 if __name__ == "__main__":
