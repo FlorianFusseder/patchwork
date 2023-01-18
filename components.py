@@ -52,6 +52,10 @@ class Market:
     class LinkedPatchList:
 
         def __init__(self):
+            self.__first: Market.LinkedPatchList.Node = None
+            self.__second: Market.LinkedPatchList.Node = None
+            self.__third: Market.LinkedPatchList.Node = None
+
             self.__head: Market.LinkedPatchList.Node = None
             self.__tail: Market.LinkedPatchList.Node = None
             self.__length = 0
@@ -64,7 +68,13 @@ class Market:
         def append(self, patch: Patch):
             self.__length += 1
             new_patch_node = Market.LinkedPatchList.Node(patch)
-            if not self.__head:
+            if not self.__first:
+                self.__first = new_patch_node
+            elif not self.__second:
+                self.__second = new_patch_node
+            elif not self.__third:
+                self.__third = new_patch_node
+            elif not self.__head:
                 self.__head = new_patch_node
                 self.__tail = new_patch_node
             else:
@@ -72,53 +82,44 @@ class Market:
                 self.__tail = new_patch_node
 
         def pop(self, index: int):
-            if index > self.__length:
-                raise IndexError("Not enough elements left in LinkedList")
             self.__length -= 1
+            if index == 0:
+                return_patch = self.__first.patch
+                self.__first = self.__second
+                self.__second = self.__third
+                self.__third = self.__head
+                self.__head = self.__third.next
+            elif index == 1:
+                return_patch = self.__second.patch
+                self.__second = self.__third
+                self.__third = self.__head
+                self.__head = self.__head.next
+                self.__tail.next = self.__first
+                self.__tail = self.__first
+            elif index == 2:
+                return_patch = self.__third.patch
+                self.__tail.next = self.__first
+                self.__first.next = self.__second
+                self.__tail = self.__second
+                self.__first = self.__head
+                self.__second = self.__head.next
+                self.__third = self.__second.next
+                self.__head = self.__third.next
+            else:
+                raise IndexError("Only first three elements are allowed")
+            return return_patch
 
-            for i in range(index, 0, -1):
-                new_head = self.__head.next
-                to_tail = self.__head
-                self.__head = new_head
+        def get_first(self):
+            return self.__first.patch
 
-                to_tail.next = None
-                self.__tail.next = to_tail
-                self.__tail = to_tail
+        def get_second(self):
+            return self.__second.patch
 
-            new_head = self.__head.next
-            patch = self.__head.patch
-            self.__head = new_head
-            return patch
+        def get_third(self):
+            return self.__third.patch
 
         def __len__(self):
             return self.__length
-
-        def __getitem__(self, item):
-            if isinstance(item, int):
-                node = self.__head
-                for i in range(0, item):
-                    node = node.next
-                return node.patch
-            elif isinstance(item, slice):
-                patch_list = []
-                temp_head = self.__head
-                for i in range(slice.start):
-                    if temp_head.next:
-                        temp_head = temp_head.next
-                    else:
-                        raise IndexError()
-
-                for i in range(slice.start, slice.stop):
-                    if slice.step and i % slice.step != 0:
-                        continue
-
-                    patch_list.append(temp_head.patch)
-                    if temp_head.next:
-                        temp_head = temp_head.next
-                    else:
-                        raise IndexError
-
-                return patch_list
 
         def __repr__(self):
             st_repr = ""
@@ -142,11 +143,20 @@ class Market:
     def take_patch(self, patch_to_take: TurnAction) -> Patch:
         return self.__linked_patch_list.pop(patch_to_take)
 
-    def __getitem__(self, item):
-        return self.__linked_patch_list[item]
+    def get_patch(self, index: int):
+        if index == 0:
+            return self.__linked_patch_list.get_first()
+        elif index == 1:
+            return self.__linked_patch_list.get_second()
+        elif index == 2:
+            return self.__linked_patch_list.get_third()
 
-    def __str__(self) -> str:
-        return "\n".join([str(p) for p in self.__linked_patch_list])
+    def get_patch_choices(self):
+        return [
+            self.__linked_patch_list.get_first(),
+            self.__linked_patch_list.get_second(),
+            self.__linked_patch_list.get_third()
+        ]
 
     def __len__(self):
         return len(self.__linked_patch_list)
@@ -354,7 +364,7 @@ class GameState:
                 patch_index = int(turn_action)
                 if not len(self._market) >= patch_index + 1:
                     return False
-                patch: Patch = self._market[patch_index]
+                patch: Patch = self._market.get_patch(patch_index)
                 return self.active_player.can_afford_patch(patch)
             case _:
                 raise NotImplementedError(f"{turn_action} not yet implemented")

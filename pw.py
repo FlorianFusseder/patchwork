@@ -109,7 +109,7 @@ def wait_for_player_choice(turn, active_player, driver, calculated_game_state: G
         assert len(newly_bought) == 1, newly_bought
         bought_patch_id = newly_bought.pop()
         click.secho(f"{active_player.player_name} ", fg=active_player.get_player_color(), nl=False)
-        taken = next((i, p) for i, p in enumerate(market[0:3]) if p.id_ == bought_patch_id)
+        taken = next((i, p) for i, p in enumerate(market.get_patch_choices()) if p.id_ == bought_patch_id)
         click.echo(f"bought patch: {taken}")
         chosen_action = TurnAction(taken[0])
     else:
