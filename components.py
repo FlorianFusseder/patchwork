@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from collections import deque
 from enum import IntEnum
-from typing import Dict, Set, Optional
+from typing import Dict, Set
 
 import click
 import numpy as np
@@ -153,7 +153,6 @@ class Player:
         return self.__player_turn
 
     def __init__(self, player_data: Dict, patch_data: Dict):
-        self.player_id = player_data["id"]
         self.player_number = int(player_data["no"])
         self.__player_turn = player_data["players_turn"]
         self.player_name = player_data["name"]
@@ -163,7 +162,7 @@ class Player:
         self.empty_spaces = int(player_data["empty_spaces"])
         self.owns_special7x7 = player_data["tile_special7x7"]
 
-        self.owned_patches: Set[Patch] = {Patch(patch_data[patch_name]) for patch_name in player_data["owned_patches"]}
+        self.owned_patches: Set[Patch] = {Patch(patch_data[patch_name]) if patch_name in patch_data else Patch() for patch_name in player_data["owned_patches"]}
 
         self.location = int(player_data["time_marker"]["location"])
         self.location_top = int(player_data["time_marker"]["top"])
@@ -171,8 +170,8 @@ class Player:
     def __str__(self) -> str:
         return f"{self.player_name}"
 
-    def status(self, track: TimeTrack) -> str:
-        return f"Player {self.player_id} {self.player_name}: Buttons: {self.button_count}, " \
+    def status(self) -> str:
+        return f"Player {self.player_name}: Buttons: {self.button_count}, " \
                f"ButtonProduction: {self.button_production}, Time: {self.location}, EmptySpaces: {self.empty_spaces}"
 
     def get_current_score(self, track):

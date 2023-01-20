@@ -63,7 +63,7 @@ def init_game(patches: Dict, token_position, players: Dict) -> (Market, Player, 
 def print_game_status(p1, p2, track):
     active_player: Player = p1 if p1.player_turn else p2
     click.secho(f"{active_player.player_name}'s turn", fg=active_player.get_player_color(), nl=False)
-    click.echo(f" ({active_player.status(track)})")
+    click.echo(f" ({active_player.status()})")
 
     p1_score = p1.get_current_score(track)
     p2_score = p2.get_current_score(track)
