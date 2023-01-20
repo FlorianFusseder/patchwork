@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from collections import deque
 from enum import IntEnum
 from typing import Dict, Set, Optional
 
@@ -49,117 +50,49 @@ class Market:
 
     special_patch_keys = {"patch_0_0", "patch_0_1", "patch_0_2", "patch_0_3", "patch_0_4"}
 
-    class LinkedPatchList:
-
-        def __init__(self):
-            self.__first: Market.LinkedPatchList.Node = None
-            self.__second: Market.LinkedPatchList.Node = None
-            self.__third: Market.LinkedPatchList.Node = None
-
-            self.__head: Market.LinkedPatchList.Node = None
-            self.__tail: Market.LinkedPatchList.Node = None
-            self.__length = 0
-
-        class Node:
-            def __init__(self, patch: Patch):
-                self.patch: Patch = patch
-                self.next: Optional[Market.LinkedPatchList.Node] = None
-
-        def append(self, patch: Patch):
-            self.__length += 1
-            new_patch_node = Market.LinkedPatchList.Node(patch)
-            if not self.__first:
-                self.__first = new_patch_node
-            elif not self.__second:
-                self.__second = new_patch_node
-            elif not self.__third:
-                self.__third = new_patch_node
-            elif not self.__head:
-                self.__head = new_patch_node
-                self.__tail = new_patch_node
-            else:
-                self.__tail.next = new_patch_node
-                self.__tail = new_patch_node
-
-        def pop(self, index: int):
-            self.__length -= 1
-            if index == 0:
-                return_patch = self.__first.patch
-                self.__first = self.__second
-                self.__second = self.__third
-                self.__third = self.__head
-                self.__head = self.__third.next
-            elif index == 1:
-                return_patch = self.__second.patch
-                self.__second = self.__third
-                self.__third = self.__head
-                self.__head = self.__head.next
-                self.__tail.next = self.__first
-                self.__tail = self.__first
-            elif index == 2:
-                return_patch = self.__third.patch
-                self.__tail.next = self.__first
-                self.__first.next = self.__second
-                self.__tail = self.__second
-                self.__first = self.__head
-                self.__second = self.__head.next
-                self.__third = self.__second.next
-                self.__head = self.__third.next
-            else:
-                raise IndexError("Only first three elements are allowed")
-            return return_patch
-
-        def get_first(self):
-            return self.__first.patch
-
-        def get_second(self):
-            return self.__second.patch
-
-        def get_third(self):
-            return self.__third.patch
-
-        def __len__(self):
-            return self.__length
-
-        def __repr__(self):
-            st_repr = ""
-            next_ = self.__head
-            while next_.next:
-                st_repr += str(next_.patch) + "\n"
-                next_ = next_.next
-
-            st_repr += str(next_.patch) + "\n"
-
-            return st_repr
-
     def __init__(self, patches, token_position) -> None:
-        self.__linked_patch_list = Market.LinkedPatchList()
+        self.__deque = deque(maxlen=33)
         token_position = int(token_position)
         market_list = [patch for patch in sorted(patches.values(), key=lambda item: int(item['state'])) if patch['location'] == 'market']
 
         for patch in market_list[token_position:] + market_list[0:token_position]:
-            self.__linked_patch_list.append(Patch(patch))
+            self.__deque.append(Patch(patch))
+
+        self.__choices = [self.__deque.popleft(), self.__deque.popleft(), self.__deque.popleft()]
 
     def take_patch(self, patch_to_take: TurnAction) -> Patch:
-        return self.__linked_patch_list.pop(patch_to_take)
+        choice_index = int(patch_to_take)
+        patch = self.__choices[choice_index]
+
+        match patch_to_take:
+            case TurnAction.PATCH_1:
+                self.__choices[0] = self.__choices[1]
+                self.__choices[1] = self.__choices[2]
+                self.__choices[2] = self.__deque.popleft()
+            case TurnAction.PATCH_2:
+                self.__deque.append(self.__choices[0])
+                self.__choices[0] = self.__choices[2]
+                self.__choices[1] = self.__deque.popleft()
+                self.__choices[2] = self.__deque.popleft()
+            case TurnAction.PATCH_3:
+                self.__deque.append(self.__choices[0])
+                self.__deque.append(self.__choices[1])
+                self.__choices[0] = self.__deque.popleft()
+                self.__choices[1] = self.__deque.popleft()
+                self.__choices[2] = self.__deque.popleft()
+            case _:
+                raise ValueError("Other value not allowed")
+
+        return patch
 
     def get_patch(self, index: int):
-        if index == 0:
-            return self.__linked_patch_list.get_first()
-        elif index == 1:
-            return self.__linked_patch_list.get_second()
-        elif index == 2:
-            return self.__linked_patch_list.get_third()
+        return self.__choices[index]
 
     def get_patch_choices(self):
-        return [
-            self.__linked_patch_list.get_first(),
-            self.__linked_patch_list.get_second(),
-            self.__linked_patch_list.get_third()
-        ]
+        return self.__choices
 
     def __len__(self):
-        return len(self.__linked_patch_list)
+        return len(self.__deque) + 3  # len of deque + 3 for the three elements in self.__choices
 
 
 class TimeTrack:
