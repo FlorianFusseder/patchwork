@@ -106,9 +106,11 @@ def print_delimiter(nl=False):
 
 @click.command()
 @click.argument("url")
-@click.option("--strategy", "-s", default="greedy_single_core", help="Turn calculation Algorithm", type=click.Choice(["greedy_single_core", "greedy_four_core"], case_sensitive=False))
+@click.option("--strategy", "-s", default="greedy_single_core", help="Turn calculation Algorithm",
+              type=click.Choice(["greedy_single_core", "greedy_four_core"], case_sensitive=False))
 @click.option("--depth", "-d", default=3, help="Depth for movement calculation", type=int)
-def go_play(url, strategy, depth):
+@click.option("--wait", "-w", is_flag=True, show_default=True, default=False, help="If this is true, there will be ongoing evaluation if a player makes a turn")
+def go_play(url, strategy, depth, wait):
     options = Options()
     options.add_argument('--headless')
     click.clear()
@@ -130,7 +132,10 @@ def go_play(url, strategy, depth):
             calculated_game_state: GameState = strategy.calculate_turn(p1, p2, pieces, track, depth)
             click.secho(f"Time needed: {timeit.default_timer() - timer}\n")
             calculated_game_state.print_outcome()
-            wait_for_player_choice(turn, driver)
+            if wait:
+                wait_for_player_choice(turn, driver)
+            else:
+                break
 
 
 if __name__ == "__main__":

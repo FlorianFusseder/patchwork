@@ -48,7 +48,7 @@ class GreedySingleCoreStrategy(EngineStrategy):
             game_state_copy = copy.deepcopy(game_state)
             game_state_copy.execute_turn(turn_action)
 
-            if current_depth < max_depth and not game_state_copy.game_end():
+            if not game_state_copy.game_end() and current_depth < max_depth:
                 contender = self.calculate_state(game_state_copy, max_depth, current_depth + 1)
                 best = self.choose_winner(game_state.player, game_state.opponent, best, contender)
             else:
